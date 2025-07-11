@@ -1219,29 +1219,31 @@
             
             // Update system name in header
             document.getElementById('currentUser').textContent = `System: ${systemConfigs[system].name}`;
-            function goToHome() {
-    // Hide main container and show system selector
-    document.getElementById('mainContainer').classList.remove('active');
-    document.getElementById('systemSelector').style.display = 'block';
-    document.getElementById('homeButton').style.display = 'none';
-    
-    // Reset system selection
-    currentSystem = '';
-    
-    // Reset any forms
-    clearForm();
-    
-    // Reset system name in header
-    document.getElementById('currentUser').textContent = 'User: Select a system';
-    
-    // Reset to first tab
-    document.querySelectorAll('.nav-tab').forEach((tab, index) => {
-        tab.classList.toggle('active', index === 0);
-    });
-    document.querySelectorAll('.tab-content').forEach((content, index) => {
-        content.classList.toggle('active', index === 0);
-    });
-}
+        }
+// Function to go back to home
+        function goToHome() {
+            // Hide main container and show system selector
+            document.getElementById('mainContainer').classList.remove('active');
+            document.getElementById('systemSelector').style.display = 'block';
+            document.getElementById('homeButton').style.display = 'none';
+            
+            // Reset system selection
+            currentSystem = '';
+            
+            // Reset any forms
+            clearForm();
+            
+            // Reset system name in header
+            document.getElementById('currentUser').textContent = 'User: Select a system';
+            
+            // Reset to first tab
+            document.querySelectorAll('.nav-tab').forEach((tab, index) => {
+                tab.classList.toggle('active', index === 0);
+            });
+            document.querySelectorAll('.tab-content').forEach((content, index) => {
+                content.classList.toggle('active', index === 0);
+            });
+        }
         }
 
         function loadCMOptions() {
