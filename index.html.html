@@ -1,0 +1,2209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calvery Services Professional Invoice System</title>
+    
+    <!-- No external email service needed - using Google Apps Script! -->
+    
+    <!-- Google Identity Services for Drive Integration -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        // =============================================
+        // INITIALIZATION
+        // =============================================
+        window.onload = function() {
+            loadSettings();
+            
+            // Check email quota on load
+            checkEmailQuota();
+            
+            // Update invoice number input event
+            document.getElementById('currentInvoiceNumber').addEventListener('input', function() {
+                document.getElementById('nextInvoicePreview').textContent = parseInt(this.value) + 1;
+            });
+        };
+
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --light-bg: #f8f9fa;
+            --white: #ffffff;
+            --gray-border: #dee2e6;
+            --text-dark: #212529;
+            --text-muted: #6c757d;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--light-bg);
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        /* Header Styles */
+        .header {
+            background-color: var(--primary-color);
+            color: var(--white);
+            padding: 1rem 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .sync-status {
+            padding: 0.25rem 0.75rem;
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            font-size: 0.875rem;
+        }
+
+        /* System Selector */
+        .system-selector {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 20px;
+        }
+
+        .system-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .system-card {
+            background-color: var(--white);
+            border-radius: 10px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .system-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+
+        .system-card.active {
+            border-color: var(--secondary-color);
+            background-color: rgba(52, 152, 219, 0.05);
+        }
+
+        .system-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .system-card h3 {
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .system-card p {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px 2rem;
+            display: none;
+        }
+
+        .container.active {
+            display: block;
+        }
+
+        /* Navigation Tabs */
+        .nav-tabs {
+            display: flex;
+            background-color: var(--white);
+            border-radius: 10px 10px 0 0;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .nav-tab {
+            flex: 1;
+            padding: 1rem;
+            background: none;
+            border: none;
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .nav-tab:hover {
+            color: var(--primary-color);
+            background-color: var(--light-bg);
+        }
+
+        .nav-tab.active {
+            color: var(--primary-color);
+            background-color: var(--white);
+        }
+
+        .nav-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background-color: var(--secondary-color);
+        }
+
+        /* Tab Content */
+        .tab-content {
+            background-color: var(--white);
+            padding: 2rem;
+            border-radius: 0 0 10px 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Form Styles */
+        .form-section {
+            margin-bottom: 2rem;
+        }
+
+        .form-section h3 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--light-bg);
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 500;
+            color: var(--text-dark);
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 0.75rem;
+            border: 1px solid var(--gray-border);
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--secondary-color);
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        /* Photo Upload Section */
+        .photo-section {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background-color: var(--light-bg);
+            border-radius: 10px;
+        }
+
+        .photo-options {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .upload-btn {
+            flex: 1;
+            padding: 0.75rem 1.5rem;
+            border: 2px dashed var(--gray-border);
+            background-color: var(--white);
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .upload-btn:hover {
+            border-color: var(--secondary-color);
+            background-color: rgba(52, 152, 219, 0.05);
+        }
+
+        .upload-btn i {
+            display: block;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: var(--secondary-color);
+        }
+
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .photo-item {
+            position: relative;
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .photo-item img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+        }
+
+        .photo-item .photo-name {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 0.5rem;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .photo-item .remove-photo {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Button Styles */
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .btn-primary {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #2980b9;
+        }
+
+        .btn-success {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #229954;
+        }
+
+        .btn-warning {
+            background-color: var(--warning-color);
+            color: white;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .btn-secondary {
+            background-color: var(--text-muted);
+            color: white;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        /* Table Styles */
+        .table-responsive {
+            overflow-x: auto;
+            margin-top: 1rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: var(--white);
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--gray-border);
+        }
+
+        th {
+            background-color: var(--light-bg);
+            font-weight: 600;
+            color: var(--primary-color);
+            white-space: nowrap;
+        }
+
+        tr:hover {
+            background-color: rgba(0,0,0,0.02);
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .status-pending {
+            background-color: var(--warning-color);
+            color: white;
+        }
+
+        .status-completed {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .status-invoiced {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+
+        /* Invoice Preview */
+        .invoice-preview {
+            background-color: var(--white);
+            border: 1px solid var(--gray-border);
+            border-radius: 10px;
+            padding: 3rem;
+            margin-top: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .invoice-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 2px solid var(--light-bg);
+        }
+
+        .company-info h2 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        .invoice-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--secondary-color);
+        }
+
+        .invoice-details {
+            text-align: right;
+        }
+
+        .invoice-details p {
+            margin-bottom: 0.5rem;
+        }
+
+        .client-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .invoice-table {
+            width: 100%;
+            margin: 2rem 0;
+        }
+
+        .invoice-table th {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 1rem;
+        }
+
+        .invoice-table td {
+            padding: 1rem;
+        }
+
+        .total-section {
+            text-align: right;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 2px solid var(--light-bg);
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 0.5rem;
+        }
+
+        .total-label {
+            margin-right: 2rem;
+            font-weight: 500;
+        }
+
+        .total-amount {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        /* Loading States */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,0.1);
+            border-radius: 50%;
+            border-top-color: var(--secondary-color);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+                gap: 1rem;
+            }
+
+            .system-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-tabs {
+                flex-direction: column;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .invoice-header {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .client-section {
+                grid-template-columns: 1fr;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            .photo-options {
+                flex-direction: column;
+            }
+        }
+
+        /* Print Styles */
+        @media print {
+            body {
+                background-color: white;
+            }
+
+            .header,
+            .system-selector,
+            .nav-tabs,
+            .button-group,
+            .photo-section {
+                display: none !important;
+            }
+
+            .invoice-preview {
+                box-shadow: none;
+                border: none;
+                padding: 0;
+            }
+        }
+
+        /* Google Drive Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: var(--white);
+            margin: 5% auto;
+            padding: 2rem;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .close-modal {
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        .drive-auth-btn {
+            width: 100%;
+            padding: 1rem;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .drive-files {
+            margin-top: 1.5rem;
+        }
+
+        .drive-file {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            border: 1px solid var(--gray-border);
+            border-radius: 5px;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .drive-file:hover {
+            background-color: var(--light-bg);
+        }
+
+        .drive-file.selected {
+            background-color: rgba(52, 152, 219, 0.1);
+            border-color: var(--secondary-color);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">Calvery Services Invoice System</div>
+            <div class="user-info">
+                <span class="sync-status">🔄 Syncing with Google Sheets</span>
+                <span id="emailUsageStatus" style="margin: 0 10px;">Emails: Loading...</span>
+                <span id="currentUser">User: Loading...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- System Selector -->
+    <div class="system-selector" id="systemSelector">
+        <h2>Select Invoice System</h2>
+        <div class="system-grid">
+            <div class="system-card" onclick="selectSystem('lennar-extra')">
+                <div class="system-icon">🔨</div>
+                <h3>Drywall Extra Repairs</h3>
+                <p>Lennar - Extra repair jobs</p>
+            </div>
+            <div class="system-card" onclick="selectSystem('lennar-warranty')">
+                <div class="system-icon">🛡️</div>
+                <h3>Warranty Jobs</h3>
+                <p>Lennar - Warranty repairs (Google Sheets)</p>
+            </div>
+            <div class="system-card" onclick="selectSystem('taylor')">
+                <div class="system-icon">🏠</div>
+                <h3>Taylor Morrison</h3>
+                <p>Warranty repair jobs</p>
+            </div>
+            <div class="system-card" onclick="selectSystem('weekley')">
+                <div class="system-icon">🏗️</div>
+                <h3>David Weekley</h3>
+                <p>Repair jobs</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container" id="mainContainer">
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('tracker')">
+                <i>📋</i> Job Tracker
+            </button>
+            <button class="nav-tab" onclick="switchTab('invoice')">
+                <i>📄</i> Invoice Generator
+            </button>
+            <button class="nav-tab" onclick="switchTab('records')">
+                <i>📊</i> Records
+            </button>
+            <button class="nav-tab" onclick="switchTab('settings')">
+                <i>⚙️</i> Settings
+            </button>
+        </div>
+
+        <!-- Job Tracker Tab -->
+        <div class="tab-content active" id="trackerTab">
+            <div class="form-section">
+                <h3>Add New Job</h3>
+                <form id="jobForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="community">Community *</label>
+                            <input type="text" id="community" name="community" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="lotNumber">Lot # *</label>
+                            <input type="text" id="lotNumber" name="lotNumber" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="cmName">CM Name *</label>
+                            <select id="cmName" name="cmName" onchange="updateEmail()" required>
+                                <option value="">Select CM...</option>
+                            </select>
+                            <input type="text" id="cmNameOther" placeholder="Enter name" style="display:none; margin-top:10px;">
+                        </div>
+                        <div class="form-group">
+                            <label for="cmEmail">CM Email *</label>
+                            <select id="cmEmail" name="cmEmail" required>
+                                <option value="">Select email...</option>
+                            </select>
+                            <input type="email" id="cmEmailOther" placeholder="Enter email" style="display:none; margin-top:10px;">
+                        </div>
+                        <div class="form-group">
+                            <label for="status">Status *</label>
+                            <select id="status" name="status" required>
+                                <option value="">Select Status</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Invoiced">Invoiced</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="dateJobDone">Job Done On *</label>
+                            <input type="date" id="dateJobDone" name="dateJobDone" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="amountEPO">Amount of EPO ($) *</label>
+                            <input type="number" id="amountEPO" name="amountEPO" step="0.01" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="poNumber">PO Number</label>
+                            <input type="text" id="poNumber" name="poNumber">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="jobDescription">Job Description *</label>
+                        <textarea id="jobDescription" name="jobDescription" required></textarea>
+                    </div>
+
+                    <!-- Photo Upload Section -->
+                    <div class="photo-section">
+                        <h4>Attach Photos</h4>
+                        <div class="photo-options">
+                            <div class="upload-btn" onclick="document.getElementById('photoUpload').click()">
+                                <i>💻</i>
+                                <span>Upload from Computer</span>
+                            </div>
+                            <div class="upload-btn" onclick="openGoogleDrivePicker()">
+                                <i>☁️</i>
+                                <span>Select from Google Drive</span>
+                            </div>
+                        </div>
+                        <input type="file" id="photoUpload" multiple accept="image/*" style="display:none;" onchange="handlePhotoUpload(event)">
+                        <div id="photoPreview" class="photo-grid"></div>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary">
+                            <i>➕</i> Add Job
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="clearForm()">
+                            <i>🔄</i> Clear Form
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="form-section">
+                <h3>Current Jobs</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Job ID</th>
+                                <th>Date Added</th>
+                                <th>Community</th>
+                                <th>Lot #</th>
+                                <th>CM Name</th>
+                                <th>Status</th>
+                                <th>Job Date</th>
+                                <th>Amount</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jobsTableBody">
+                            <!-- Jobs will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Invoice Generator Tab -->
+        <div class="tab-content" id="invoiceTab">
+            <div class="form-section">
+                <h3>Generate Invoice</h3>
+                <div class="form-group">
+                    <label for="selectJob">Select Job to Invoice</label>
+                    <select id="selectJob" onchange="previewInvoice()">
+                        <option value="">Select a completed job...</option>
+                    </select>
+                </div>
+
+                <div id="invoicePreview" class="invoice-preview" style="display: none;">
+                    <!-- Invoice preview will be generated here -->
+                </div>
+
+                <div class="button-group" id="invoiceActions" style="display: none;">
+                    <button class="btn btn-success" onclick="sendInvoice()">
+                        <i>📧</i> Send Invoice via Email
+                    </button>
+                    <button class="btn btn-primary" onclick="printInvoice()">
+                        <i>🖨️</i> Print / Save as PDF
+                    </button>
+                    <button class="btn btn-warning" onclick="downloadInvoice()">
+                        <i>💾</i> Download Invoice
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Records Tab -->
+        <div class="tab-content" id="recordsTab">
+            <div class="form-section">
+                <h3>Invoice Records</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Invoice #</th>
+                                <th>Date Sent</th>
+                                <th>Community</th>
+                                <th>Lot #</th>
+                                <th>CM Name</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordsTableBody">
+                            <!-- Records will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div class="tab-content" id="settingsTab">
+            <div class="form-section">
+                <h3>System Configuration</h3>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Google Sheets URL (for sync)</label>
+                        <input type="text" id="sheetsUrl" placeholder="Paste your Google Sheets URL here">
+                        <small style="color: var(--text-muted);">For Warranty Jobs data synchronization</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Google Apps Script URL</label>
+                        <input type="text" id="scriptUrl" placeholder="Paste your Web App URL here">
+                        <small style="color: var(--text-muted);">From Google Apps Script deployment</small>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="saveSettings()">
+                        <i>💾</i> Save Settings
+                    </button>
+                    <button class="btn btn-warning" onclick="testEmailConfiguration()">
+                        <i>🧪</i> Test Email
+                    </button>
+                    <button class="btn btn-success" onclick="syncWithGoogleSheets()">
+                        <i>🔄</i> Sync with Google Sheets
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h3>Email Configuration (Google Apps Script)</h3>
+                <div style="background-color: var(--light-bg); padding: 20px; border-radius: 10px;">
+                    <h4 id="emailQuotaStatus">Loading email quota...</h4>
+                    <div style="margin-top: 15px;">
+                        <p><strong>Email Service:</strong> Google Apps Script MailApp</p>
+                        <p><strong>Daily Limit:</strong> <span id="emailLimit">Checking...</span></p>
+                        <p><strong>Remaining Today:</strong> <span id="emailRemaining">Checking...</span></p>
+                        <div style="width: 100%; height: 20px; background-color: #e0e0e0; border-radius: 10px; margin-top: 10px;">
+                            <div id="emailQuotaBar" style="width: 0%; height: 100%; background-color: #27ae60; border-radius: 10px;"></div>
+                        </div>
+                    </div>
+                    <p style="margin-top: 15px; color: var(--text-muted); font-size: 0.875rem;">
+                        * Free Gmail: 100 emails/day<br>
+                        * Google Workspace: 1,500 emails/day<br>
+                        * Quota resets daily at midnight
+                    </p>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h3>Invoice Number Configuration</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Current Invoice Number</label>
+                        <input type="number" id="currentInvoiceNumber" value="1000">
+                        <small style="color: var(--text-muted);">Next invoice will be: INV-<span id="nextInvoicePreview">1001</span></small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Drive Modal -->
+    <div id="driveModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Select Photos from Google Drive</h3>
+                <span class="close-modal" onclick="closeDriveModal()">&times;</span>
+            </div>
+            <button class="drive-auth-btn" onclick="authenticateGoogleDrive()">
+                <i>🔐</i> Connect to Google Drive
+            </button>
+            <div id="driveFiles" class="drive-files"></div>
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="selectDrivePhotos()">Select Photos</button>
+                <button class="btn btn-secondary" onclick="closeDriveModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =============================================
+        // CONFIGURATION - Replace with your actual values
+        // =============================================
+        const CONFIG = {
+            googleSheets: {
+                apiKey: 'YOUR_GOOGLE_API_KEY',
+                sheetId: '1Fa4ioLZIl9ZlG4eQw50ij23L62hgvnnC43bKq5-xbcQ',
+                clientId: 'YOUR_GOOGLE_CLIENT_ID',
+                scriptUrl: https://script.google.com/macros/s/AKfycby9bIzvD-rrAL7h90ryVtC-dJq20fAPU6ZsG4jD12lDOjoIrtJ3zzv7TIEiJeo3oDI7Vw/exec // From deployment
+            }
+        };
+
+        // Email quota tracking (Google Apps Script provides 100-1500 emails/day)
+        let emailQuota = {
+            remaining: 100,
+            total: 100,
+            lastChecked: new Date()
+        };
+
+        // =============================================
+        // GLOBAL VARIABLES
+        // =============================================
+        let currentSystem = '';
+        let currentPhotos = [];
+        let selectedDriveFiles = [];
+        let googleAuth = null;
+        let invoiceCounter = parseInt(localStorage.getItem('invoiceCounter') || '1000');
+
+        // CM mappings for each system
+        const systemConfigs = {
+            'lennar-extra': {
+                name: 'Drywall Extra Repairs (Lennar)',
+                cms: {
+                    'Brian': 'brian.morales@lennar.com',
+                    'Daniel': 'daniel.annicelli@lennar.com',
+                    'Dustin': 'dustin.taylor@lennar.com',
+                    'Jacob': 'jacob.peltz@lennar.com',
+                    'Lacey': 'lacey.talley@lennar.com',
+                    'Jason': 'jason.dutra@lennar.com',
+                    'Jose': 'jose.romero@lennar.com',
+                    'Mark': 'mark.molenda@lennar.com',
+                    'Sean': 'sean.mallett@lennar.com',
+                    'Other': 'other'
+                }
+            },
+            'lennar-warranty': {
+                name: 'Warranty Jobs (Lennar)',
+                cms: {
+                    'Brian': 'brian.morales@lennar.com',
+                    'Daniel': 'daniel.annicelli@lennar.com',
+                    'Dustin': 'dustin.taylor@lennar.com',
+                    'Jacob': 'jacob.peltz@lennar.com',
+                    'Lacey': 'lacey.talley@lennar.com',
+                    'Other': 'other'
+                },
+                useGoogleSheets: true
+            },
+            'taylor': {
+                name: 'Taylor Morrison Warranty Repairs',
+                cms: {
+                    'Bryan': 'BSantosMontalvo@taylormorrison.com',
+                    'Charlene': 'clively@taylormorrison.com',
+                    'Cristian': 'ccomparini@taylormorrison.com',
+                    'Richie': 'rcassens@taylormorrison.com',
+                    'Shana': 'shbutler@taylormorrison.com',
+                    'Other': 'other'
+                }
+            },
+            'weekley': {
+                name: 'David Weekley Repairs',
+                cms: {
+                    'John': 'john.smith@davidweekley.com',
+                    'Sarah': 'sarah.jones@davidweekley.com',
+                    'Mike': 'mike.wilson@davidweekley.com',
+                    'Other': 'other'
+                }
+            }
+        };
+
+        // =============================================
+        // GOOGLE SHEETS INTEGRATION
+        // =============================================
+        class GoogleSheetsDB {
+            constructor() {
+                this.scriptUrl = CONFIG.googleSheets.scriptUrl;
+            }
+
+            async getAllJobs(system) {
+                try {
+                    const response = await fetch(`${this.scriptUrl}?action=getJobs&system=${system}`);
+                    const data = await response.json();
+                    return data.jobs || [];
+                } catch (error) {
+                    console.error('Error fetching jobs:', error);
+                    return [];
+                }
+            }
+
+            async addJob(system, job) {
+                try {
+                    const response = await fetch(this.scriptUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            action: 'addJob',
+                            system: system,
+                            job: job
+                        })
+                    });
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error adding job:', error);
+                    return { success: false, error: error.message };
+                }
+            }
+
+            async updateJob(system, jobId, updates) {
+                try {
+                    const response = await fetch(this.scriptUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            action: 'updateJob',
+                            system: system,
+                            jobId: jobId,
+                            updates: updates
+                        })
+                    });
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error updating job:', error);
+                    return { success: false, error: error.message };
+                }
+            }
+
+            async deleteJob(system, jobId) {
+                try {
+                    const response = await fetch(this.scriptUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            action: 'deleteJob',
+                            system: system,
+                            jobId: jobId
+                        })
+                    });
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error deleting job:', error);
+                    return { success: false, error: error.message };
+                }
+            }
+
+            async getInvoices(system) {
+                try {
+                    const response = await fetch(`${this.scriptUrl}?action=getInvoices&system=${system}`);
+                    const data = await response.json();
+                    return data.invoices || [];
+                } catch (error) {
+                    console.error('Error fetching invoices:', error);
+                    return [];
+                }
+            }
+
+            async addInvoice(system, invoice) {
+                try {
+                    const response = await fetch(this.scriptUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            action: 'addInvoice',
+                            system: system,
+                            invoice: invoice
+                        })
+                    });
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error adding invoice:', error);
+                    return { success: false, error: error.message };
+                }
+            }
+
+            async getNextInvoiceNumber() {
+                try {
+                    const response = await fetch(`${this.scriptUrl}?action=getNextInvoiceNumber`);
+                    const data = await response.json();
+                    return data.nextNumber || 1001;
+                } catch (error) {
+                    console.error('Error getting invoice number:', error);
+                    return invoiceCounter + 1;
+                }
+            }
+        }
+
+        const db = new GoogleSheetsDB();
+
+        // =============================================
+        // SYSTEM FUNCTIONS
+        // =============================================
+        function selectSystem(system) {
+            currentSystem = system;
+            
+            // Update UI
+            document.querySelectorAll('.system-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            event.target.closest('.system-card').classList.add('active');
+            
+            // Show main container
+            document.getElementById('systemSelector').style.display = 'none';
+            document.getElementById('mainContainer').classList.add('active');
+            
+            // Load CM options for selected system
+            loadCMOptions();
+            
+            // Load jobs for selected system
+            loadJobs();
+            
+            // Update system name in header
+            document.getElementById('currentUser').textContent = `System: ${systemConfigs[system].name}`;
+        }
+
+        function loadCMOptions() {
+            const config = systemConfigs[currentSystem];
+            const cmSelect = document.getElementById('cmName');
+            const emailSelect = document.getElementById('cmEmail');
+            
+            // Clear existing options
+            cmSelect.innerHTML = '<option value="">Select CM...</option>';
+            emailSelect.innerHTML = '<option value="">Select email...</option>';
+            
+            // Add CM options
+            Object.keys(config.cms).forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                cmSelect.appendChild(option);
+                
+                if (config.cms[name] !== 'other') {
+                    const emailOption = document.createElement('option');
+                    emailOption.value = config.cms[name];
+                    emailOption.textContent = config.cms[name];
+                    emailSelect.appendChild(emailOption);
+                }
+            });
+            
+            // Add "Other" option to email select
+            const otherOption = document.createElement('option');
+            otherOption.value = 'other';
+            otherOption.textContent = 'Other (Enter manually)';
+            emailSelect.appendChild(otherOption);
+        }
+
+        function updateEmail() {
+            const nameSelect = document.getElementById('cmName');
+            const emailSelect = document.getElementById('cmEmail');
+            const nameOther = document.getElementById('cmNameOther');
+            const emailOther = document.getElementById('cmEmailOther');
+            
+            const selectedName = nameSelect.value;
+            const config = systemConfigs[currentSystem];
+            
+            if (selectedName === 'Other') {
+                nameOther.style.display = 'block';
+                emailOther.style.display = 'block';
+                emailSelect.value = 'other';
+            } else if (selectedName && config.cms[selectedName]) {
+                nameOther.style.display = 'none';
+                emailOther.style.display = 'none';
+                emailSelect.value = config.cms[selectedName];
+            } else {
+                nameOther.style.display = 'none';
+                emailOther.style.display = 'none';
+                emailSelect.value = '';
+            }
+        }
+
+        // =============================================
+        // TAB NAVIGATION
+        // =============================================
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName + 'Tab').classList.add('active');
+            
+            // Load data based on tab
+            if (tabName === 'invoice') {
+                loadJobsForInvoicing();
+            } else if (tabName === 'records') {
+                loadInvoiceRecords();
+            } else if (tabName === 'settings') {
+                updateEmailUsageDisplay();
+            }
+        }
+
+        // =============================================
+        // PHOTO HANDLING
+        // =============================================
+        function handlePhotoUpload(event) {
+            const files = event.target.files;
+            const preview = document.getElementById('photoPreview');
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const photoData = {
+                        id: Date.now() + '_' + i,
+                        name: file.name,
+                        data: e.target.result,
+                        size: file.size,
+                        type: file.type,
+                        source: 'local'
+                    };
+                    
+                    currentPhotos.push(photoData);
+                    addPhotoToPreview(photoData);
+                };
+                
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function addPhotoToPreview(photo) {
+            const preview = document.getElementById('photoPreview');
+            const photoItem = document.createElement('div');
+            photoItem.className = 'photo-item';
+            photoItem.innerHTML = `
+                <img src="${photo.data}" alt="${photo.name}">
+                <div class="photo-name">${photo.name}</div>
+                <button class="remove-photo" onclick="removePhoto('${photo.id}')">×</button>
+            `;
+            preview.appendChild(photoItem);
+        }
+
+        function removePhoto(photoId) {
+            currentPhotos = currentPhotos.filter(p => p.id !== photoId);
+            refreshPhotoPreview();
+        }
+
+        function refreshPhotoPreview() {
+            const preview = document.getElementById('photoPreview');
+            preview.innerHTML = '';
+            currentPhotos.forEach(photo => addPhotoToPreview(photo));
+        }
+
+        // =============================================
+        // GOOGLE DRIVE INTEGRATION
+        // =============================================
+        function openGoogleDrivePicker() {
+            document.getElementById('driveModal').style.display = 'block';
+        }
+
+        function closeDriveModal() {
+            document.getElementById('driveModal').style.display = 'none';
+        }
+
+        function authenticateGoogleDrive() {
+            // Initialize Google API
+            gapi.load('auth2', function() {
+                gapi.auth2.init({
+                    client_id: CONFIG.googleSheets.clientId,
+                    scope: 'https://www.googleapis.com/auth/drive.readonly'
+                }).then(function(auth) {
+                    googleAuth = auth;
+                    if (!auth.isSignedIn.get()) {
+                        auth.signIn().then(loadDriveFiles);
+                    } else {
+                        loadDriveFiles();
+                    }
+                });
+            });
+        }
+
+        function loadDriveFiles() {
+            gapi.client.load('drive', 'v3', function() {
+                gapi.client.drive.files.list({
+                    'pageSize': 50,
+                    'fields': 'files(id, name, mimeType, thumbnailLink)',
+                    'q': "mimeType contains 'image/'"
+                }).then(function(response) {
+                    displayDriveFiles(response.result.files);
+                });
+            });
+        }
+
+        function displayDriveFiles(files) {
+            const container = document.getElementById('driveFiles');
+            container.innerHTML = '';
+            
+            files.forEach(file => {
+                const fileDiv = document.createElement('div');
+                fileDiv.className = 'drive-file';
+                fileDiv.innerHTML = `
+                    <input type="checkbox" value="${file.id}" data-name="${file.name}">
+                    <img src="${file.thumbnailLink}" style="width: 50px; height: 50px; object-fit: cover; margin: 0 10px;">
+                    <span>${file.name}</span>
+                `;
+                container.appendChild(fileDiv);
+            });
+        }
+
+        function selectDrivePhotos() {
+            const checkboxes = document.querySelectorAll('#driveFiles input[type="checkbox"]:checked');
+            checkboxes.forEach(checkbox => {
+                const photoData = {
+                    id: 'drive_' + checkbox.value,
+                    name: checkbox.dataset.name,
+                    data: `https://drive.google.com/uc?id=${checkbox.value}`,
+                    driveId: checkbox.value,
+                    source: 'drive'
+                };
+                currentPhotos.push(photoData);
+                addPhotoToPreview(photoData);
+            });
+            closeDriveModal();
+        }
+
+        // =============================================
+        // JOB MANAGEMENT
+        // =============================================
+        document.getElementById('jobForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            let cmName = formData.get('cmName');
+            let cmEmail = formData.get('cmEmail');
+            
+            // Handle "Other" option
+            if (cmName === 'Other') {
+                cmName = document.getElementById('cmNameOther').value;
+            }
+            if (cmEmail === 'other') {
+                cmEmail = document.getElementById('cmEmailOther').value;
+            }
+            
+            const job = {
+                id: 'JOB-' + Date.now(),
+                timestamp: new Date().toISOString(),
+                community: formData.get('community'),
+                lotNumber: formData.get('lotNumber'),
+                cmName: cmName,
+                cmEmail: cmEmail,
+                status: formData.get('status'),
+                jobDescription: formData.get('jobDescription'),
+                dateJobDone: formData.get('dateJobDone'),
+                amountEPO: parseFloat(formData.get('amountEPO')),
+                poNumber: formData.get('poNumber'),
+                photos: [...currentPhotos],
+                system: currentSystem
+            };
+            
+            // Save to Google Sheets
+            const result = await db.addJob(currentSystem, job);
+            
+            if (result.success) {
+                alert('Job added successfully!');
+                clearForm();
+                loadJobs();
+            } else {
+                alert('Error adding job. Please try again.');
+            }
+        });
+
+        async function loadJobs() {
+            const jobs = await db.getAllJobs(currentSystem);
+            const tbody = document.getElementById('jobsTableBody');
+            tbody.innerHTML = '';
+            
+            jobs.forEach(job => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${job.id}</td>
+                    <td>${new Date(job.timestamp).toLocaleDateString()}</td>
+                    <td>${job.community}</td>
+                    <td>${job.lotNumber}</td>
+                    <td>${job.cmName}</td>
+                    <td><span class="status-badge status-${job.status.toLowerCase()}">${job.status}</span></td>
+                    <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
+                    <td>$${job.amountEPO.toFixed(2)}</td>
+                    <td>
+                        <button class="btn btn-small btn-primary" onclick="editJob('${job.id}')">Edit</button>
+                        <button class="btn btn-small btn-success" onclick="changeStatus('${job.id}')">Status</button>
+                        <button class="btn btn-small btn-danger" onclick="deleteJob('${job.id}')">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function clearForm() {
+            document.getElementById('jobForm').reset();
+            document.getElementById('photoPreview').innerHTML = '';
+            currentPhotos = [];
+            document.getElementById('cmNameOther').style.display = 'none';
+            document.getElementById('cmEmailOther').style.display = 'none';
+        }
+
+        async function editJob(jobId) {
+            const jobs = await db.getAllJobs(currentSystem);
+            const job = jobs.find(j => j.id === jobId);
+            
+            if (!job) return;
+            
+            // Fill form with job data
+            document.getElementById('community').value = job.community;
+            document.getElementById('lotNumber').value = job.lotNumber;
+            document.getElementById('status').value = job.status;
+            document.getElementById('jobDescription').value = job.jobDescription;
+            document.getElementById('dateJobDone').value = job.dateJobDone;
+            document.getElementById('amountEPO').value = job.amountEPO;
+            document.getElementById('poNumber').value = job.poNumber || '';
+            
+            // Handle CM selection
+            const config = systemConfigs[currentSystem];
+            if (config.cms[job.cmName]) {
+                document.getElementById('cmName').value = job.cmName;
+                document.getElementById('cmEmail').value = job.cmEmail;
+            } else {
+                document.getElementById('cmName').value = 'Other';
+                document.getElementById('cmNameOther').value = job.cmName;
+                document.getElementById('cmNameOther').style.display = 'block';
+                document.getElementById('cmEmail').value = 'other';
+                document.getElementById('cmEmailOther').value = job.cmEmail;
+                document.getElementById('cmEmailOther').style.display = 'block';
+            }
+            
+            // Load photos
+            currentPhotos = job.photos || [];
+            refreshPhotoPreview();
+            
+            // Scroll to form
+            window.scrollTo(0, 0);
+            
+            // Delete the old job
+            await db.deleteJob(currentSystem, jobId);
+            loadJobs();
+            
+            alert('Job loaded for editing. Make your changes and click "Add Job" to save.');
+        }
+
+        async function changeStatus(jobId) {
+            const newStatus = prompt('Enter new status:\n- Pending\n- Completed\n- Invoiced');
+            
+            if (newStatus && ['Pending', 'Completed', 'Invoiced'].includes(newStatus)) {
+                const updates = { status: newStatus };
+                
+                if (newStatus === 'Invoiced') {
+                    updates.invoiceNumber = 'INV-' + (await db.getNextInvoiceNumber());
+                    updates.dateInvoiced = new Date().toISOString();
+                }
+                
+                const result = await db.updateJob(currentSystem, jobId, updates);
+                
+                if (result.success) {
+                    alert(`Status changed to: ${newStatus}`);
+                    loadJobs();
+                } else {
+                    alert('Error updating status. Please try again.');
+                }
+            }
+        }
+
+        async function deleteJob(jobId) {
+            if (confirm('Are you sure you want to delete this job?')) {
+                const result = await db.deleteJob(currentSystem, jobId);
+                
+                if (result.success) {
+                    alert('Job deleted successfully!');
+                    loadJobs();
+                } else {
+                    alert('Error deleting job. Please try again.');
+                }
+            }
+        }
+
+        // =============================================
+        // INVOICE GENERATION
+        // =============================================
+        async function loadJobsForInvoicing() {
+            const jobs = await db.getAllJobs(currentSystem);
+            const select = document.getElementById('selectJob');
+            select.innerHTML = '<option value="">Select a completed job...</option>';
+            
+            const completedJobs = jobs.filter(job => job.status === 'Completed');
+            
+            if (completedJobs.length === 0) {
+                select.innerHTML += '<option value="">No completed jobs found - mark jobs as "Completed" first</option>';
+            } else {
+                completedJobs.forEach(job => {
+                    const option = document.createElement('option');
+                    option.value = job.id;
+                    option.textContent = `${job.community} - Lot ${job.lotNumber} - ${job.cmName} - $${job.amountEPO}`;
+                    select.appendChild(option);
+                });
+            }
+        }
+
+        async function previewInvoice() {
+            const jobId = document.getElementById('selectJob').value;
+            if (!jobId) {
+                document.getElementById('invoicePreview').style.display = 'none';
+                document.getElementById('invoiceActions').style.display = 'none';
+                return;
+            }
+            
+            const jobs = await db.getAllJobs(currentSystem);
+            const job = jobs.find(j => j.id === jobId);
+            
+            if (!job) return;
+            
+            const invoiceNumber = 'INV-' + (await db.getNextInvoiceNumber());
+            const currentDate = new Date().toLocaleDateString();
+            
+            const invoiceHTML = `
+                <div class="invoice-header">
+                    <div class="company-info">
+                        <h2>Calvery Services Corp.</h2>
+                        <p>P.O. Box 8156<br>
+                        Tampa, Florida 33674-8156<br>
+                        Phone: 863-329-8339<br>
+                        Email: calveryservices007@gmail.com</p>
+                    </div>
+                    <div class="invoice-details">
+                        <div class="invoice-number">${invoiceNumber}</div>
+                        <p><strong>Date:</strong> ${currentDate}</p>
+                        <p><strong>PO Number:</strong> ${job.poNumber || 'N/A'}</p>
+                    </div>
+                </div>
+                
+                <div class="client-section">
+                    <div>
+                        <h3>Bill To:</h3>
+                        <p><strong>${job.cmName}</strong><br>
+                        ${job.cmEmail}<br>
+                        ${systemConfigs[currentSystem].name}<br>
+                        Community: ${job.community}<br>
+                        Lot #: ${job.lotNumber}</p>
+                    </div>
+                    <div>
+                        <h3>Job Details:</h3>
+                        <p><strong>Job ID:</strong> ${job.id}<br>
+                        <strong>Job Date:</strong> ${new Date(job.dateJobDone).toLocaleDateString()}<br>
+                        <strong>Status:</strong> ${job.status}</p>
+                    </div>
+                </div>
+                
+                <table class="invoice-table">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th>Job Done On</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <strong>${systemConfigs[currentSystem].name}</strong><br>
+                                ${job.jobDescription}
+                                ${job.photos && job.photos.length > 0 ? `<br><em>Photos attached (${job.photos.length})</em>` : ''}
+                            </td>
+                            <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
+                            <td>$${job.amountEPO.toFixed(2)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="total-section">
+                    <div class="total-row">
+                        <span class="total-label">Subtotal:</span>
+                        <span>$${job.amountEPO.toFixed(2)}</span>
+                    </div>
+                    <div class="total-row">
+                        <span class="total-label">Tax (0%):</span>
+                        <span>$0.00</span>
+                    </div>
+                    <div class="total-row">
+                        <span class="total-label total-amount">Total:</span>
+                        <span class="total-amount">$${job.amountEPO.toFixed(2)}</span>
+                    </div>
+                </div>
+                
+                ${job.photos && job.photos.length > 0 ? `
+                <div style="margin-top: 2rem; page-break-before: always;">
+                    <h3>Job Photos</h3>
+                    <div class="photo-grid">
+                        ${job.photos.map(photo => `
+                            <img src="${photo.data}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 5px;">
+                        `).join('')}
+                    </div>
+                </div>
+                ` : ''}
+                
+                <div style="margin-top: 3rem; text-align: center; color: var(--text-muted);">
+                    <p><strong>Thank you for your business!</strong></p>
+                    <p>Please remit payment within 30 days of invoice date.</p>
+                </div>
+            `;
+            
+            document.getElementById('invoicePreview').innerHTML = invoiceHTML;
+            document.getElementById('invoicePreview').style.display = 'block';
+            document.getElementById('invoiceActions').style.display = 'flex';
+            
+            // Store invoice data for sending
+            window.currentInvoiceData = {
+                job: job,
+                invoiceNumber: invoiceNumber,
+                invoiceHTML: invoiceHTML
+            };
+        }
+
+        async function sendInvoice() {
+            if (!window.currentInvoiceData) {
+                alert('Please select a job first');
+                return;
+            }
+            
+            const { job, invoiceNumber, invoiceHTML } = window.currentInvoiceData;
+            
+            // Check email quota first
+            await checkEmailQuota();
+            
+            if (emailQuota.remaining <= 0) {
+                alert(`Daily email limit reached! You have sent ${emailQuota.total} emails today. Try again tomorrow.`);
+                return;
+            }
+            
+            // Prepare invoice data for Google Apps Script
+            const invoiceData = {
+                invoiceNumber: invoiceNumber,
+                invoiceDate: new Date().toLocaleDateString(),
+                cmName: job.cmName,
+                cmEmail: job.cmEmail,
+                jobType: systemConfigs[currentSystem].name,
+                community: job.community,
+                lotNumber: job.lotNumber,
+                amount: job.amountEPO.toFixed(2),
+                jobDescription: job.jobDescription
+            };
+            
+            try {
+                // Send via Google Apps Script
+                const response = await fetch(CONFIG.googleSheets.scriptUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'sendInvoice',
+                        invoiceData: invoiceData
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Update email quota
+                    emailQuota.remaining = result.remainingQuota;
+                    updateEmailQuotaDisplay();
+                    
+                    // Create invoice record
+                    const invoice = {
+                        invoiceNumber: invoiceNumber,
+                        dateSent: new Date().toISOString(),
+                        jobId: job.id,
+                        community: job.community,
+                        lotNumber: job.lotNumber,
+                        cmName: job.cmName,
+                        cmEmail: job.cmEmail,
+                        amount: job.amountEPO,
+                        status: 'Sent',
+                        system: currentSystem
+                    };
+                    
+                    // Save invoice record
+                    await db.addInvoice(currentSystem, invoice);
+                    
+                    // Update job status
+                    await db.updateJob(currentSystem, job.id, {
+                        status: 'Invoiced',
+                        invoiceNumber: invoiceNumber,
+                        dateInvoiced: new Date().toISOString()
+                    });
+                    
+                    // Update invoice counter
+                    invoiceCounter = parseInt(invoiceNumber.split('-')[1]);
+                    localStorage.setItem('invoiceCounter', invoiceCounter.toString());
+                    
+                    alert(`Invoice ${invoiceNumber} sent successfully to ${job.cmEmail}!\n\nEmails remaining today: ${emailQuota.remaining}`);
+                    
+                    // Reset form
+                    document.getElementById('selectJob').value = '';
+                    document.getElementById('invoicePreview').style.display = 'none';
+                    document.getElementById('invoiceActions').style.display = 'none';
+                    
+                    // Reload jobs
+                    loadJobs();
+                } else {
+                    alert('Failed to send invoice. Error: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error sending invoice:', error);
+                alert('Failed to send invoice. Please check your internet connection and try again.');
+            }
+        }
+
+        // Check email quota from Google Apps Script
+        async function checkEmailQuota() {
+            try {
+                const response = await fetch(`${CONFIG.googleSheets.scriptUrl}?action=checkEmailQuota`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    emailQuota.remaining = data.remainingEmails;
+                    emailQuota.total = data.remainingEmails > 100 ? 1500 : 100; // Google Workspace vs free Gmail
+                    emailQuota.lastChecked = new Date();
+                    updateEmailQuotaDisplay();
+                }
+            } catch (error) {
+                console.error('Error checking email quota:', error);
+            }
+        }
+
+        // Update email quota display
+        function updateEmailQuotaDisplay() {
+            const used = emailQuota.total - emailQuota.remaining;
+            document.getElementById('emailUsageStatus').textContent = `Emails today: ${used}/${emailQuota.total}`;
+        }
+
+        function printInvoice() {
+            window.print();
+        }
+
+        function downloadInvoice() {
+            alert('To save as PDF:\n1. Click "Print / Save as PDF"\n2. Choose "Save as PDF" as the destination\n3. Click "Save"');
+        }
+
+        // =============================================
+        // RECORDS MANAGEMENT
+        // =============================================
+        async function loadInvoiceRecords() {
+            const invoices = await db.getInvoices(currentSystem);
+            const tbody = document.getElementById('recordsTableBody');
+            tbody.innerHTML = '';
+            
+            invoices.forEach(invoice => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${invoice.invoiceNumber}</td>
+                    <td>${new Date(invoice.dateSent).toLocaleDateString()}</td>
+                    <td>${invoice.community}</td>
+                    <td>${invoice.lotNumber}</td>
+                    <td>${invoice.cmName}</td>
+                    <td>$${invoice.amount.toFixed(2)}</td>
+                    <td><span class="status-badge status-invoiced">${invoice.status}</span></td>
+                    <td>
+                        <button class="btn btn-small btn-primary" onclick="resendInvoice('${invoice.invoiceNumber}')">Resend</button>
+                        <button class="btn btn-small btn-secondary" onclick="viewInvoice('${invoice.invoiceNumber}')">View</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // =============================================
+        // SETTINGS MANAGEMENT
+        // =============================================
+        function saveSettings() {
+            const settings = {
+                sheetsUrl: document.getElementById('sheetsUrl').value,
+                scriptUrl: document.getElementById('scriptUrl').value,
+                currentInvoiceNumber: document.getElementById('currentInvoiceNumber').value
+            };
+            
+            localStorage.setItem('invoiceSystemSettings', JSON.stringify(settings));
+            invoiceCounter = parseInt(settings.currentInvoiceNumber);
+            localStorage.setItem('invoiceCounter', invoiceCounter.toString());
+            
+            // Update CONFIG
+            if (settings.scriptUrl) {
+                CONFIG.googleSheets.scriptUrl = settings.scriptUrl;
+                db.scriptUrl = settings.scriptUrl;
+            }
+            
+            // Update next invoice preview
+            document.getElementById('nextInvoicePreview').textContent = invoiceCounter + 1;
+            
+            alert('Settings saved successfully!');
+        }
+
+        function loadSettings() {
+            const savedSettings = localStorage.getItem('invoiceSystemSettings');
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+                document.getElementById('sheetsUrl').value = settings.sheetsUrl || '';
+                document.getElementById('scriptUrl').value = settings.scriptUrl || '';
+                document.getElementById('currentInvoiceNumber').value = settings.currentInvoiceNumber || '1000';
+                
+                // Update CONFIG
+                if (settings.scriptUrl) {
+                    CONFIG.googleSheets.scriptUrl = settings.scriptUrl;
+                    db.scriptUrl = settings.scriptUrl;
+                }
+            }
+            
+            // Update next invoice preview
+            document.getElementById('nextInvoicePreview').textContent = invoiceCounter + 1;
+        }
+
+        function updateEmailUsageDisplay() {
+            document.getElementById('emailQuotaStatus').textContent = `Email Quota Status`;
+            document.getElementById('emailLimit').textContent = emailQuota.total + ' emails/day';
+            document.getElementById('emailRemaining').textContent = emailQuota.remaining;
+            
+            const percentUsed = ((emailQuota.total - emailQuota.remaining) / emailQuota.total) * 100;
+            const quotaBar = document.getElementById('emailQuotaBar');
+            quotaBar.style.width = percentUsed + '%';
+            
+            // Change color based on usage
+            if (percentUsed > 80) {
+                quotaBar.style.backgroundColor = '#f39c12'; // Warning
+            } else if (percentUsed > 95) {
+                quotaBar.style.backgroundColor = '#e74c3c'; // Danger
+            } else {
+                quotaBar.style.backgroundColor = '#27ae60'; // Success
+            }
+        }
+
+        function testEmailConfiguration() {
+            fetch(CONFIG.googleSheets.scriptUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'sendInvoice',
+                    invoiceData: {
+                        invoiceNumber: 'TEST-001',
+                        invoiceDate: new Date().toLocaleDateString(),
+                        cmName: 'Test User',
+                        cmEmail: 'calveryservices007@gmail.com',
+                        jobType: 'Test Job Type',
+                        community: 'Test Community',
+                        lotNumber: '99',
+                        amount: '100.00',
+                        jobDescription: 'This is a test invoice'
+                    }
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    alert(`Test email sent successfully!\n\nCheck your inbox at calveryservices007@gmail.com\n\nEmails remaining today: ${result.remainingQuota}`);
+                } else {
+                    alert('Test failed. Error: ' + result.error);
+                }
+            })
+            .catch(error => {
+                alert('Test failed. Error: ' + error.toString());
+            });
+        }
+
+        async function syncWithGoogleSheets() {
+            if (currentSystem === 'lennar-warranty') {
+                alert('Syncing with your Gmail-automated warranty sheet...');
+                
+                try {
+                    // Fetch warranty jobs from the Gmail-fed sheet
+                    const response = await fetch(`${db.scriptUrl}?action=getWarrantyJobsFromSheet`);
+                    const data = await response.json();
+                    
+                    if (data.jobs && data.jobs.length > 0) {
+                        alert(`Found ${data.jobs.length} warranty jobs from your automated sheet!\n\nThese are read-only from your Gmail automation.\nYou can modify job descriptions when creating invoices.`);
+                        
+                        // Display the jobs in a special read-only format
+                        displayWarrantyJobs(data.jobs);
+                    } else {
+                        alert('No warranty jobs found in the Google Sheets.\nMake sure your Gmail automation is working correctly.');
+                    }
+                } catch (error) {
+                    console.error('Sync error:', error);
+                    alert('Error syncing with Google Sheets. Please check your configuration.');
+                }
+            } else {
+                alert('This system does not use Google Sheets synchronization.');
+            }
+        }
+
+        // Special display function for Gmail-automated warranty jobs
+        function displayWarrantyJobs(jobs) {
+            const tbody = document.getElementById('jobsTableBody');
+            tbody.innerHTML = '';
+            
+            // Add notice about Gmail automation
+            const noticeRow = document.createElement('tr');
+            noticeRow.innerHTML = `
+                <td colspan="9" style="background-color: #e3f2fd; text-align: center; padding: 10px;">
+                    <strong>📧 These jobs are automatically imported from your Gmail → Calendar → Sheets workflow</strong>
+                </td>
+            `;
+            tbody.appendChild(noticeRow);
+            
+            jobs.forEach(job => {
+                const row = document.createElement('tr');
+                row.style.backgroundColor = '#f5f5f5'; // Light gray to show it's imported
+                row.innerHTML = `
+                    <td>${job.id}</td>
+                    <td>${new Date(job.timestamp).toLocaleDateString()}</td>
+                    <td>${job.community}</td>
+                    <td>${job.lotNumber}</td>
+                    <td>${job.cmName}</td>
+                    <td><span class="status-badge status-${job.status.toLowerCase()}">${job.status}</span></td>
+                    <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
+                    <td>${job.amountEPO.toFixed(2)}</td>
+                    <td>
+                        <button class="btn btn-small btn-primary" onclick="createInvoiceFromWarranty('${job.id}')">
+                            📄 Create Invoice
+                        </button>
+                        <span style="color: #666; font-size: 11px; margin-left: 5px;">Auto-imported</span>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            // Store warranty jobs for invoice creation
+            window.warrantyJobs = jobs;
+        }
+
+        // Create invoice from warranty job
+        async function createInvoiceFromWarranty(jobId) {
+            const job = window.warrantyJobs.find(j => j.id === jobId);
+            if (!job) return;
+            
+            // Allow user to modify the job description
+            const modifiedDescription = prompt('Modify job description if needed:', job.jobDescription);
+            if (modifiedDescription === null) return; // User cancelled
+            
+            // Create a modified job for invoicing
+            const invoiceJob = {
+                ...job,
+                jobDescription: modifiedDescription || job.jobDescription,
+                status: 'Completed' // Set to completed for invoicing
+            };
+            
+            // Switch to invoice tab and load this job
+            document.querySelector('.nav-tab:nth-child(2)').click(); // Click invoice tab
+            
+            // Pre-select this job for invoicing
+            setTimeout(() => {
+                window.currentInvoiceData = {
+                    job: invoiceJob,
+                    invoiceNumber: 'INV-' + (invoiceCounter + 1)
+                };
+                previewInvoiceForWarranty(invoiceJob);
+            }, 100);
+        }
+
+        // Special preview function for warranty jobs
+        async function previewInvoiceForWarranty(job) {
+            const invoiceNumber = 'INV-' + (await db.getNextInvoiceNumber());
+            const currentDate = new Date().toLocaleDateString();
+            
+            const invoiceHTML = `
+                <div class="invoice-header">
+                    <div class="company-info">
+                        <h2>Calvery Services Corp.</h2>
+                        <p>P.O. Box 8156<br>
+                        Tampa, Florida 33674-8156<br>
+                        Phone: 863-329-8339<br>
+                        Email: calveryservices007@gmail.com</p>
+                    </div>
+                    <div class="invoice-details">
+                        <div class="invoice-number">${invoiceNumber}</div>
+                        <p><strong>Date:</strong> ${currentDate}</p>
+                        <p style="color: #666; font-size: 12px;">Source: Gmail Automation</p>
+                    </div>
+                </div>
+                
+                <div class="client-section">
+                    <div>
+                        <h3>Bill To:</h3>
+                        <p><strong>${job.cmName}</strong><br>
+                        ${job.cmEmail}<br>
+                        Lennar - Warranty Jobs<br>
+                        Community: ${job.community}<br>
+                        Lot #: ${job.lotNumber}</p>
+                    </div>
+                    <div>
+                        <h3>Job Details:</h3>
+                        <p><strong>Job ID:</strong> ${job.id}<br>
+                        <strong>Job Date:</strong> ${new Date(job.dateJobDone).toLocaleDateString()}<br>
+                        <strong>Auto-imported from Gmail</strong></p>
+                    </div>
+                </div>
+                
+                <table class="invoice-table">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th>Job Done On</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <strong>Lennar Warranty Repairs</strong><br>
+                                ${job.jobDescription}
+                            </td>
+                            <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
+                            <td>${job.amountEPO.toFixed(2)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="total-section">
+                    <div class="total-row">
+                        <span class="total-label">Subtotal:</span>
+                        <span>${job.amountEPO.toFixed(2)}</span>
+                    </div>
+                    <div class="total-row">
+                        <span class="total-label">Tax (0%):</span>
+                        <span>$0.00</span>
+                    </div>
+                    <div class="total-row">
+                        <span class="total-label total-amount">Total:</span>
+                        <span class="total-amount">${job.amountEPO.toFixed(2)}</span>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 3rem; text-align: center; color: var(--text-muted);">
+                    <p><strong>Thank you for your business!</strong></p>
+                    <p>Please remit payment within 30 days of invoice date.</p>
+                </div>
+            `;
+            
+            document.getElementById('invoicePreview').innerHTML = invoiceHTML;
+            document.getElementById('invoicePreview').style.display = 'block';
+            document.getElementById('invoiceActions').style.display = 'flex';
+            
+            // Store invoice data for sending
+            window.currentInvoiceData = {
+                job: job,
+                invoiceNumber: invoiceNumber,
+                invoiceHTML: invoiceHTML
+            };
+        }
+
+        // Modified loadJobs function to handle warranty jobs
+        async function loadJobs() {
+            let jobs = await db.getAllJobs(currentSystem);
+            
+            // For warranty system, also check for auto-populate option
+            if (currentSystem === 'lennar-warranty' && systemConfigs[currentSystem].useGoogleSheets) {
+                // Add a sync button if needed
+                const syncButton = document.createElement('button');
+                syncButton.className = 'btn btn-success';
+                syncButton.style.marginBottom = '20px';
+                syncButton.innerHTML = '<i>🔄</i> Sync Warranty Jobs from Google Sheets';
+                syncButton.onclick = syncWithGoogleSheets;
+                
+                const tableContainer = document.querySelector('.table-responsive');
+                if (tableContainer && !document.querySelector('.sync-warranty-btn')) {
+                    syncButton.className += ' sync-warranty-btn';
+                    tableContainer.parentNode.insertBefore(syncButton, tableContainer);
+                }
+            }
+            
+            const tbody = document.getElementById('jobsTableBody');
+            tbody.innerHTML = '';
+            
+            jobs.forEach(job => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${job.id}</td>
+                    <td>${new Date(job.timestamp).toLocaleDateString()}</td>
+                    <td>${job.community}</td>
+                    <td>${job.lotNumber}</td>
+                    <td>${job.cmName}</td>
+                    <td><span class="status-badge status-${job.status.toLowerCase()}">${job.status}</span></td>
+                    <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
+                    <td>${job.amountEPO.toFixed(2)}</td>
+                    <td>
+                        <button class="btn btn-small btn-primary" onclick="editJob('${job.id}')">Edit</button>
+                        <button class="btn btn-small btn-success" onclick="changeStatus('${job.id}')">Status</button>
+                        <button class="btn btn-small btn-danger" onclick="deleteJob('${job.id}')">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+    </script>
+</body>
+</html>
+
