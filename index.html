@@ -1456,33 +1456,84 @@
             }
         }
 
-        async function previewInvoice() {
-            const jobId = document.getElementById('selectJob').value;
-            if (!jobId) {
-                document.getElementById('invoicePreview').style.display = 'none';
-                document.getElementById('invoiceActions').style.display = 'none';
-                return;
-            }
+       async function previewInvoice() {
+    const jobId = document.getElementById('selectJob').value;
+    if (!jobId) {
+        document.getElementById('invoicePreview').style.display = 'none';
+        document.getElementById('invoiceActions').style.display = 'none';
+        return;
+    }
+    
+    try {
+        const jobsResult = await db.getAllJobs(currentSystem);
+        const job = (jobsResult.jobs || []).find(j => j.id === jobId);
+        if (!job) return;
+
+        const invoiceNumResult = await db.getNextInvoiceNumber();
+        const invoiceNumber = 'INV-' + invoiceNumResult.nextNumber; // ADD THIS LINE!
+        const currentDate = new Date().toLocaleDateString();
+        
+        const invoiceHTML = `
+            <div class="invoice-header">
+                <div class="company-info">
+                    <h2>Calvery Services Corp.</h2>
+                    <p>P.O. Box 8156<br>
+                    Tampa, Florida 33674-8156<br>
+                    Phone: 863-329-8339<br>
+                    Email: calveryservices007@gmail.com</p>
+                </div>
+                <div class="invoice-details">
+                    <div class="invoice-number">INV-${invoiceNumber}</div>
+                    <p><strong>Date:</strong> ${currentDate}</p>
+                    <p><strong>PO Number:</strong> ${job.poNumber || 'N/A'}</p>
+                </div>
+            </div>
             
-            try {
-                const jobsResult = await db.getAllJobs(currentSystem);
-                const job = (jobsResult.jobs || []).find(j => j.id === jobId);
-                if (!job) return;
+            <div class="client-section">
+                <div>
+                    <h3>Bill To:</h3>
+                    <p><strong>${job.cmName}</strong><br>
+                    ${job.cmEmail}<br>
+                    ${systemConfigs[currentSystem].name}<br>
+                    Community: ${job.community}<br>
+                    Lot #: ${job.lotNumber}</p>
+                </div>
+            </div>
+            
+            <table class="invoice-table">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Date</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>${job.jobDescription}</td>
+                        <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
+                        <td>$${job.amountEPO.toFixed(2)}</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div class="total-section">
+                <div class="total-row">
+                    <span class="total-label total-amount">Total:</span>
+                    <span class="total-amount">$${job.amountEPO.toFixed(2)}</span>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('invoicePreview').innerHTML = invoiceHTML;
+        document.getElementById('invoicePreview').style.display = 'block';
+        document.getElementById('invoiceActions').style.display = 'flex';
 
-                const invoiceNumResult = await db.getNextInvoiceNumber();
-                const invoiceNumber = invoiceNumResult.nextNumber;
-                const currentDate = new Date().toLocaleDateString();
-                
-                const invoiceHTML = `...`; // Your invoice HTML generation logic here
-                document.getElementById('invoicePreview').innerHTML = invoiceHTML; // Simplified for brevity
-                document.getElementById('invoicePreview').style.display = 'block';
-                document.getElementById('invoiceActions').style.display = 'flex';
-
-                window.currentInvoiceData = { job, invoiceNumber, invoiceHTML };
-            } catch (error) {
-                showNotification('Could not generate invoice preview.', 'error');
-            }
-        }
+        window.currentInvoiceData = { job, invoiceNumber, invoiceHTML };
+    } catch (error) {
+        showNotification('Could not generate invoice preview.', 'error');
+    }
+}
 
         function sendInvoice(event) {
             const sendButton = event.currentTarget;
