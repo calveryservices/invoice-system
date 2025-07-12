@@ -915,7 +915,7 @@
                 </div>
 
                 <div class="button-group" id="invoiceActions" style="display: none;">
-                    <button class="btn btn-success" onclick="sendInvoice()">
+                    <button class="btn btn-success" onclick="sendInvoice(event)">
                         <i>📧</i> Send Invoice via Email
                     </button>
                     <button class="btn btn-primary" onclick="printInvoice()">
@@ -1026,13 +1026,13 @@
 
     <script>
         // =============================================
-        // CONFIGURATION - Replace with your actual values
+        // CONFIGURATION
         // =============================================
         const CONFIG = {
             googleSheets: {
                 apiKey: 'YOUR_GOOGLE_API_KEY',
                 clientId: 'YOUR_GOOGLE_CLIENT_ID',
-                scriptUrl: '' // This will be loaded from localStorage
+                scriptUrl: '' // Loaded from localStorage
             }
         };
 
@@ -1083,12 +1083,17 @@
         // =============================================
         window.onload = function() {
             loadSettings();
-            checkEmailQuota();
+            if (CONFIG.googleSheets.scriptUrl) {
+                testConnection();
+                checkEmailQuota();
+            } else {
+                showNotification('Please configure your Google Apps Script URL in the Settings tab.', 'warning');
+                document.querySelector('.sync-status').textContent = '❌ Not Configured';
+            }
             document.getElementById('currentInvoiceNumber').addEventListener('input', function() {
                 document.getElementById('nextInvoicePreview').textContent = parseInt(this.value) + 1;
             });
             document.getElementById('currentUser').textContent = 'Select a system';
-            document.querySelector('.sync-status').textContent = 'Offline';
         };
 
         // =============================================
@@ -1131,7 +1136,7 @@
         };
 
         // =============================================
-        // GOOGLE SHEETS INTEGRATION
+        // GOOGLE SHEETS INTEGRATION (API CLASS)
         // =============================================
         class GoogleSheetsDB {
             constructor() {
@@ -1140,11 +1145,10 @@
 
             async _fetch(endpoint, options = {}) {
                 if (!this.scriptUrl) {
-                   showNotification('Google Apps Script URL is not configured. Please set it in the Settings tab.', 'error');
+                   showNotification('Google Apps Script URL is not configured.', 'error');
                    throw new Error('Script URL not set');
                 }
                 
-                // Show loading indicator on button
                 const button = options.button;
                 let originalContent = '';
                 if (button) {
@@ -1154,17 +1158,36 @@
                 }
 
                 try {
-                    const response = await fetch(this.scriptUrl + endpoint, options);
-                    if (!response.ok) {
-                        throw new Error(`Network response was not ok: ${response.status} ${response.statusText}`);
+                    const fetchOptions = options.body ? {
+                        method: 'POST',
+                        mode: 'cors',
+                        body: options.body,
+                        // The redirect: 'follow' is often needed for Apps Script
+                        redirect: 'follow' 
+                    } : { method: 'GET', mode: 'cors' };
+
+                    // Apps Script doesn't handle JSON content type well with CORS, so we send as plain text
+                    if (fetchOptions.body) {
+                        fetchOptions.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
                     }
-                    return await response.json();
+
+                    const response = await fetch(this.scriptUrl + endpoint, fetchOptions);
+                    
+                    if (!response.ok) {
+                        throw new Error(`Network error: ${response.status} ${response.statusText}`);
+                    }
+                    
+                    const result = await response.json();
+                    if (result.error) {
+                        throw new Error(`Script error: ${result.error}`);
+                    }
+                    return result;
+
                 } catch (error) {
-                    console.error('Fetch Error:', error);
-                    showNotification(`Connection Error: ${error.message}. Check the console for details.`, 'error');
-                    throw error; // Re-throw the error to be caught by the calling function
+                    console.error('API Call Failed:', { endpoint, error });
+                    showNotification(error.message, 'error');
+                    throw error;
                 } finally {
-                    // Restore button state
                     if (button) {
                         button.innerHTML = originalContent;
                         button.disabled = false;
@@ -1172,63 +1195,36 @@
                 }
             }
 
-            async getAllJobs(system) {
-                return this._fetch(`?action=getJobs&system=${system}`);
-            }
+            async test() { return this._fetch('?action=test'); }
+            async getEmailQuota() { return this._fetch('?action=checkEmailQuota'); }
+            async getAllJobs(system) { return this._fetch(`?action=getJobs&system=${system}`); }
+            async getInvoices(system) { return this._fetch(`?action=getInvoices&system=${system}`); }
+            async getNextInvoiceNumber() { return this._fetch(`?action=getNextInvoiceNumber`); }
 
             async addJob(system, job, button) {
-                return this._fetch('', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Use text/plain to avoid preflight
-                    body: JSON.stringify({ action: 'addJob', system, job }),
-                    button: button
-                });
+                const payload = { action: 'addJob', system, job };
+                return this._fetch('', { body: JSON.stringify(payload), button });
             }
-
             async updateJob(system, jobId, updates) {
-                 return this._fetch('', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'updateJob', system, jobId, updates })
-                });
+                const payload = { action: 'updateJob', system, jobId, updates };
+                return this._fetch('', { body: JSON.stringify(payload) });
             }
-
             async deleteJob(system, jobId) {
-                 return this._fetch('', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'deleteJob', system, jobId })
-                });
+                const payload = { action: 'deleteJob', system, jobId };
+                return this._fetch('', { body: JSON.stringify(payload) });
             }
-
-            async getInvoices(system) {
-                return this._fetch(`?action=getInvoices&system=${system}`);
-            }
-
             async addInvoice(system, invoice) {
-                 return this._fetch('', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'addInvoice', system, invoice })
-                });
+                const payload = { action: 'addInvoice', system, invoice };
+                return this._fetch('', { body: JSON.stringify(payload) });
             }
-
-            async getNextInvoiceNumber() {
-                return this._fetch(`?action=getNextInvoiceNumber`);
-            }
-            
             async sendInvoice(invoiceData, button) {
-                return this._fetch('', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'sendInvoice', invoiceData }),
-                    button: button
-                });
+                const payload = { action: 'sendInvoice', invoiceData };
+                return this._fetch('', { body: JSON.stringify(payload), button });
             }
         }
 
         const db = new GoogleSheetsDB();
-
+        
         // =============================================
         // SYSTEM & UI FUNCTIONS
         // =============================================
@@ -1346,7 +1342,7 @@
                 dateJobDone: formData.get('dateJobDone'),
                 amountEPO: parseFloat(formData.get('amountEPO')),
                 poNumber: formData.get('poNumber'),
-                photos: currentPhotos.map(p => ({ name: p.name, data: p.data, source: p.source })), // Avoid sending full data if not needed
+                photos: currentPhotos.map(p => ({ name: p.name, data: p.data, source: p.source })),
                 system: currentSystem
             };
             
@@ -1356,11 +1352,9 @@
                     showNotification('Job added successfully!', 'success');
                     clearForm();
                     loadJobs();
-                } else {
-                    showNotification(`Error adding job: ${result.error}`, 'error');
                 }
             } catch (error) {
-                // The _fetch helper already shows a notification
+                // Error handled by _fetch
             }
         });
 
@@ -1381,11 +1375,10 @@
                         <td>${job.cmName}</td>
                         <td><span class="status-badge status-${job.status.toLowerCase()}">${job.status}</span></td>
                         <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
-                        <td>$${job.amountEPO.toFixed(2)}</td>
+                        <td>$${parseFloat(job.amountEPO).toFixed(2)}</td>
                         <td>
-                            <button class="btn btn-small btn-primary" onclick="editJob(event, '${job.id}')">Edit</button>
-                            <button class="btn btn-small btn-success" onclick="changeStatus(event, '${job.id}')">Status</button>
-                            <button class="btn btn-small btn-danger" onclick="deleteJob('${job.id}')">Delete</button>
+                            <button class="btn btn-sm btn-primary no-print" onclick="editJob(event, '${job.id}')">Edit</button>
+                            <button class="btn btn-sm btn-danger no-print" onclick="deleteJob('${job.id}')">Delete</button>
                         </td>
                     `;
                     tbody.appendChild(row);
@@ -1404,13 +1397,7 @@
         }
 
         async function editJob(event, jobId) {
-            // Implementation for editing jobs...
             showNotification('Edit functionality coming soon!', 'info');
-        }
-
-        async function changeStatus(event, jobId) {
-            // Implementation for changing status...
-            showNotification('Status change functionality coming soon!', 'info');
         }
 
         function deleteJob(jobId) {
@@ -1420,11 +1407,9 @@
                     if (result.success) {
                         showNotification('Job deleted successfully!', 'success');
                         loadJobs();
-                    } else {
-                        showNotification(`Error deleting job: ${result.error}`, 'error');
                     }
                 } catch (error) {
-                    // Notification handled by _fetch
+                    // Error handled by _fetch
                 }
             });
         }
@@ -1447,7 +1432,7 @@
                     completedJobs.forEach(job => {
                         const option = document.createElement('option');
                         option.value = job.id;
-                        option.textContent = `${job.community} - Lot ${job.lotNumber} - $${job.amountEPO}`;
+                        option.textContent = `${job.community} - Lot ${job.lotNumber} - $${parseFloat(job.amountEPO).toFixed(2)}`;
                         select.appendChild(option);
                     });
                 }
@@ -1456,84 +1441,68 @@
             }
         }
 
-       async function previewInvoice() {
-    const jobId = document.getElementById('selectJob').value;
-    if (!jobId) {
-        document.getElementById('invoicePreview').style.display = 'none';
-        document.getElementById('invoiceActions').style.display = 'none';
-        return;
-    }
-    
-    try {
-        const jobsResult = await db.getAllJobs(currentSystem);
-        const job = (jobsResult.jobs || []).find(j => j.id === jobId);
-        if (!job) return;
+        async function previewInvoice() {
+            const jobId = document.getElementById('selectJob').value;
+            if (!jobId) {
+                document.getElementById('invoicePreview').style.display = 'none';
+                document.getElementById('invoiceActions').style.display = 'none';
+                return;
+            }
+            
+            try {
+                const jobsResult = await db.getAllJobs(currentSystem);
+                const job = (jobsResult.jobs || []).find(j => j.id === jobId);
+                if (!job) {
+                    showNotification('Could not find the selected job.', 'error');
+                    return;
+                }
 
-        const invoiceNumResult = await db.getNextInvoiceNumber();
-        const invoiceNumber = 'INV-' + invoiceNumResult.nextNumber; // ADD THIS LINE!
-        const currentDate = new Date().toLocaleDateString();
-        
-        const invoiceHTML = `
-            <div class="invoice-header">
-                <div class="company-info">
-                    <h2>Calvery Services Corp.</h2>
-                    <p>P.O. Box 8156<br>
-                    Tampa, Florida 33674-8156<br>
-                    Phone: 863-329-8339<br>
-                    Email: calveryservices007@gmail.com</p>
-                </div>
-                <div class="invoice-details">
-                    <div class="invoice-number">INV-${invoiceNumber}</div>
-                    <p><strong>Date:</strong> ${currentDate}</p>
-                    <p><strong>PO Number:</strong> ${job.poNumber || 'N/A'}</p>
-                </div>
-            </div>
-            
-            <div class="client-section">
-                <div>
-                    <h3>Bill To:</h3>
-                    <p><strong>${job.cmName}</strong><br>
-                    ${job.cmEmail}<br>
-                    ${systemConfigs[currentSystem].name}<br>
-                    Community: ${job.community}<br>
-                    Lot #: ${job.lotNumber}</p>
-                </div>
-            </div>
-            
-            <table class="invoice-table">
-                <thead>
-                    <tr>
-                        <th>Description</th>
-                        <th>Date</th>
-                        <th>Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>${job.jobDescription}</td>
-                        <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
-                        <td>$${job.amountEPO.toFixed(2)}</td>
-                    </tr>
-                </tbody>
-            </table>
-            
-            <div class="total-section">
-                <div class="total-row">
-                    <span class="total-label total-amount">Total:</span>
-                    <span class="total-amount">$${job.amountEPO.toFixed(2)}</span>
-                </div>
-            </div>
-        `;
-        
-        document.getElementById('invoicePreview').innerHTML = invoiceHTML;
-        document.getElementById('invoicePreview').style.display = 'block';
-        document.getElementById('invoiceActions').style.display = 'flex';
+                const invoiceNumResult = await db.getNextInvoiceNumber();
+                const invoiceNumber = invoiceNumResult.nextNumber;
+                const currentDate = new Date().toLocaleDateString();
+                
+                const invoiceHTML = `
+                    <div class="invoice-header">
+                        <div class="company-info">
+                            <h2>Calvery Services Corp.</h2>
+                            <p>P.O. Box 8156<br>Tampa, Florida 33674-8156<br>Phone: 863-329-8339<br>Email: calveryservices007@gmail.com</p>
+                        </div>
+                        <div class="invoice-details">
+                            <div class="invoice-number">INV-${invoiceNumber}</div>
+                            <p><strong>Date:</strong> ${currentDate}</p>
+                            <p><strong>PO Number:</strong> ${job.poNumber || 'N/A'}</p>
+                        </div>
+                    </div>
+                    <div class="client-section">
+                        <div>
+                            <h3>Bill To:</h3>
+                            <p><strong>${job.cmName}</strong><br>${job.cmEmail}<br>${systemConfigs[currentSystem].name}<br>Community: ${job.community}<br>Lot #: ${job.lotNumber}</p>
+                        </div>
+                    </div>
+                    <table class="invoice-table">
+                        <thead><tr><th>Description</th><th>Date</th><th>Amount</th></tr></thead>
+                        <tbody><tr>
+                            <td>${job.jobDescription}</td>
+                            <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
+                            <td>$${parseFloat(job.amountEPO).toFixed(2)}</td>
+                        </tr></tbody>
+                    </table>
+                    <div class="total-section">
+                        <div class="total-row">
+                            <span class="total-label total-amount">Total:</span>
+                            <span class="total-amount">$${parseFloat(job.amountEPO).toFixed(2)}</span>
+                        </div>
+                    </div>`;
+                
+                document.getElementById('invoicePreview').innerHTML = invoiceHTML;
+                document.getElementById('invoicePreview').style.display = 'block';
+                document.getElementById('invoiceActions').style.display = 'flex';
 
-        window.currentInvoiceData = { job, invoiceNumber, invoiceHTML };
-    } catch (error) {
-        showNotification('Could not generate invoice preview.', 'error');
-    }
-}
+                window.currentInvoiceData = { job, invoiceNumber: `INV-${invoiceNumber}` };
+            } catch (error) {
+                showNotification('Could not generate invoice preview.', 'error');
+            }
+        }
 
         function sendInvoice(event) {
             const sendButton = event.currentTarget;
@@ -1544,7 +1513,7 @@
             
             showConfirmation('Are you sure you want to email this invoice?', async () => {
                 const { job, invoiceNumber } = window.currentInvoiceData;
-                const invoiceData = {
+                const invoiceDataForEmail = {
                     invoiceNumber,
                     invoiceDate: new Date().toLocaleDateString(),
                     cmName: job.cmName,
@@ -1552,25 +1521,31 @@
                     jobType: systemConfigs[currentSystem].name,
                     community: job.community,
                     lotNumber: job.lotNumber,
-                    amount: job.amountEPO.toFixed(2),
+                    amount: parseFloat(job.amountEPO).toFixed(2),
                     jobDescription: job.jobDescription
                 };
 
                 try {
-                    const result = await db.sendInvoice(invoiceData, sendButton);
+                    const result = await db.sendInvoice(invoiceDataForEmail, sendButton);
                     if (result.success) {
-                        await db.addInvoice(currentSystem, { /* invoice record data */ });
+                        const invoiceRecord = {
+                            invoiceNumber, dateSent: new Date().toISOString(),
+                            jobId: job.id, community: job.community, lotNumber: job.lotNumber,
+                            cmName: job.cmName, cmEmail: job.cmEmail, amount: job.amountEPO,
+                            status: 'Sent', system: currentSystem
+                        };
+                        await db.addInvoice(currentSystem, invoiceRecord);
                         await db.updateJob(currentSystem, job.id, { status: 'Invoiced' });
+                        
                         showNotification(`Invoice ${invoiceNumber} sent successfully!`, 'success');
+                        
                         loadJobs();
                         loadJobsForInvoicing();
                         document.getElementById('invoicePreview').style.display = 'none';
                         document.getElementById('invoiceActions').style.display = 'none';
-                    } else {
-                         showNotification(`Failed to send invoice: ${result.error}`, 'error');
                     }
                 } catch(error) {
-                    // Handled by _fetch
+                    // Error handled by _fetch
                 }
             });
         }
@@ -1583,7 +1558,29 @@
         // RECORDS & SETTINGS
         // =============================================
         async function loadInvoiceRecords() {
-            // Implementation for loading invoice records...
+            try {
+                const result = await db.getInvoices(currentSystem);
+                const invoices = result.invoices || [];
+                const tbody = document.getElementById('recordsTableBody');
+                tbody.innerHTML = '';
+                
+                invoices.forEach(invoice => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${invoice.invoiceNumber}</td>
+                        <td>${new Date(invoice.dateSent).toLocaleDateString()}</td>
+                        <td>${invoice.community}</td>
+                        <td>${invoice.lotNumber}</td>
+                        <td>${invoice.cmName}</td>
+                        <td>$${parseFloat(invoice.amount).toFixed(2)}</td>
+                        <td><span class="status-badge status-invoiced">${invoice.status}</span></td>
+                        <td><button class="btn btn-sm btn-secondary no-print">View</button></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                 document.getElementById('recordsTableBody').innerHTML = `<tr><td colspan="8">Could not load records.</td></tr>`;
+            }
         }
 
         function saveSettings() {
@@ -1592,27 +1589,29 @@
                 currentInvoiceNumber: document.getElementById('currentInvoiceNumber').value
             };
             
+            if (!settings.scriptUrl || !settings.scriptUrl.includes('macros/s')) {
+                showNotification('Please enter a valid Google Apps Script URL.', 'error');
+                return;
+            }
+
             localStorage.setItem('invoiceSystemSettings', JSON.stringify(settings));
             invoiceCounter = parseInt(settings.currentInvoiceNumber);
             CONFIG.googleSheets.scriptUrl = settings.scriptUrl;
             db.scriptUrl = settings.scriptUrl;
             
             document.getElementById('nextInvoicePreview').textContent = invoiceCounter + 1;
-            showNotification('Settings saved successfully!', 'success');
+            showNotification('Settings saved!', 'success');
             testConnection();
         }
 
         function loadSettings() {
-            const savedSettings = localStorage.getItem('invoiceSystemSettings');
-            if (savedSettings) {
-                const settings = JSON.parse(savedSettings);
-                document.getElementById('scriptUrl').value = settings.scriptUrl || '';
-                document.getElementById('currentInvoiceNumber').value = settings.currentInvoiceNumber || '1000';
-                
-                invoiceCounter = parseInt(settings.currentInvoiceNumber || '1000');
-                CONFIG.googleSheets.scriptUrl = settings.scriptUrl || '';
-                db.scriptUrl = settings.scriptUrl || '';
-            }
+            const savedSettings = JSON.parse(localStorage.getItem('invoiceSystemSettings') || '{}');
+            document.getElementById('scriptUrl').value = savedSettings.scriptUrl || '';
+            document.getElementById('currentInvoiceNumber').value = savedSettings.currentInvoiceNumber || '1000';
+            
+            invoiceCounter = parseInt(savedSettings.currentInvoiceNumber || '1000');
+            CONFIG.googleSheets.scriptUrl = savedSettings.scriptUrl || '';
+            db.scriptUrl = savedSettings.scriptUrl || '';
             document.getElementById('nextInvoicePreview').textContent = invoiceCounter + 1;
         }
         
@@ -1620,150 +1619,84 @@
             const syncStatus = document.querySelector('.sync-status');
             syncStatus.textContent = '🔄 Testing...';
             try {
-                const result = await db._fetch('?action=test');
-                if (result.status.includes('connected')) {
+                const result = await db.test();
+                if (result.status && result.status.includes('connected')) {
                     syncStatus.textContent = '✅ Connected';
-                    showNotification('Connection to Google Apps Script successful!', 'success');
+                    showNotification('Connection successful!', 'success');
                 } else {
                     throw new Error('Invalid response from script');
                 }
             } catch (error) {
                 syncStatus.textContent = '❌ Connection Failed';
-                showNotification('Connection failed. Check Script URL and deployment.', 'error');
+            }
+        }
+        
+        async function checkEmailQuota() {
+            try {
+                const result = await db.getEmailQuota();
+                if (result.success) {
+                    const remaining = result.remainingEmails;
+                    const total = remaining > 100 ? 1500 : 100;
+                    const used = total - remaining;
+                    const percent = total > 0 ? (used / total) * 100 : 0;
+                    
+                    document.getElementById('emailLimit').textContent = `${total} emails/day`;
+                    document.getElementById('emailRemaining').textContent = remaining;
+                    document.getElementById('emailQuotaBar').style.width = percent + '%';
+                    
+                    const bar = document.getElementById('emailQuotaBar');
+                    if (percent > 90) bar.style.backgroundColor = '#e74c3c';
+                    else if (percent > 70) bar.style.backgroundColor = '#f39c12';
+                    else bar.style.backgroundColor = '#27ae60';
+                }
+            } catch (error) {
+                document.getElementById('emailQuotaStatus').textContent = 'Email quota check failed';
             }
         }
 
-        async function checkEmailQuota() {
-            // Implementation for checking email quota...
-        }
-
         // =============================================
-// PHOTO HANDLING
-// =============================================
-function handlePhotoUpload(event) {
-    const files = event.target.files;
-    for (let file of files) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const photoData = {
-                id: Date.now() + '_' + Math.random(),
-                name: file.name,
-                data: e.target.result,
-                size: file.size,
-                type: file.type,
-                source: 'local'
-            };
-            currentPhotos.push(photoData);
-            addPhotoToPreview(photoData);
-        };
-        reader.readAsDataURL(file);
-    }
-}
-
-function addPhotoToPreview(photo) {
-    const preview = document.getElementById('photoPreview');
-    const photoItem = document.createElement('div');
-    photoItem.className = 'photo-item';
-    photoItem.innerHTML = `
-        <img src="${photo.data}" alt="${photo.name}">
-        <div class="photo-name">${photo.name}</div>
-        <button class="remove-photo" onclick="removePhoto('${photo.id}')">×</button>
-    `;
-    preview.appendChild(photoItem);
-}
-
-function removePhoto(photoId) {
-    currentPhotos = currentPhotos.filter(p => p.id !== photoId);
-    document.getElementById('photoPreview').innerHTML = '';
-    currentPhotos.forEach(photo => addPhotoToPreview(photo));
-}
-
-// Google Drive functions (placeholders for now)
-function openGoogleDrivePicker() {
-    showNotification('Google Drive integration coming soon!', 'info');
-}
-
-function closeDriveModal() {
-    document.getElementById('driveModal').style.display = 'none';
-}
-
-        const invoiceHTML = `
-    <div class="invoice-header">
-        <div class="company-info">
-            <h2>Calvery Services Corp.</h2>
-            <p>P.O. Box 8156<br>
-            Tampa, Florida 33674-8156<br>
-            Phone: 863-329-8339<br>
-            Email: calveryservices007@gmail.com</p>
-        </div>
-        <div class="invoice-details">
-            <div class="invoice-number">INV-${invoiceNumber}</div>
-            <p><strong>Date:</strong> ${currentDate}</p>
-            <p><strong>PO Number:</strong> ${job.poNumber || 'N/A'}</p>
-        </div>
-    </div>
-    
-    <div class="client-section">
-        <div>
-            <h3>Bill To:</h3>
-            <p><strong>${job.cmName}</strong><br>
-            ${job.cmEmail}<br>
-            ${systemConfigs[currentSystem].name}<br>
-            Community: ${job.community}<br>
-            Lot #: ${job.lotNumber}</p>
-        </div>
-    </div>
-    
-    <table class="invoice-table">
-        <thead>
-            <tr>
-                <th>Description</th>
-                <th>Date</th>
-                <th>Amount</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>${job.jobDescription}</td>
-                <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
-                <td>$${job.amountEPO.toFixed(2)}</td>
-            </tr>
-        </tbody>
-    </table>
-    
-    <div class="total-section">
-        <div class="total-row">
-            <span class="total-label total-amount">Total:</span>
-            <span class="total-amount">$${job.amountEPO.toFixed(2)}</span>
-        </div>
-    </div>
-`;
-        async function checkEmailQuota() {
-    try {
-        const result = await db._fetch('?action=checkEmailQuota');
-        if (result.success) {
-            const remaining = result.remainingEmails;
-            const total = remaining > 100 ? 1500 : 100;
-            const used = total - remaining;
-            const percent = (used / total) * 100;
-            
-            document.getElementById('emailLimit').textContent = `${total} emails/day`;
-            document.getElementById('emailRemaining').textContent = remaining;
-            document.getElementById('emailQuotaBar').style.width = percent + '%';
-            
-            // Change color based on usage
-            const bar = document.getElementById('emailQuotaBar');
-            if (percent > 90) bar.style.backgroundColor = '#e74c3c';
-            else if (percent > 70) bar.style.backgroundColor = '#f39c12';
-            else bar.style.backgroundColor = '#27ae60';
+        // PHOTO & DRIVE FUNCTIONS
+        // =============================================
+        function handlePhotoUpload(event) {
+            const files = event.target.files;
+            for (let file of files) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const photoData = {
+                        id: Date.now() + '_' + Math.random(),
+                        name: file.name,
+                        data: e.target.result,
+                        size: file.size,
+                        type: file.type,
+                        source: 'local'
+                    };
+                    currentPhotos.push(photoData);
+                    addPhotoToPreview(photoData);
+                };
+                reader.readAsDataURL(file);
+            }
         }
-    } catch (error) {
-        document.getElementById('emailQuotaStatus').textContent = 'Email quota check failed';
-    }
-}
-        // Other functions (photo handling, Drive integration, etc.) would go here...
-        // They are omitted for brevity but should be included from your original file.
 
+        function addPhotoToPreview(photo) {
+            const preview = document.getElementById('photoPreview');
+            const photoItem = document.createElement('div');
+            photoItem.className = 'photo-item';
+            photoItem.innerHTML = `
+                <img src="${photo.data}" alt="${photo.name}">
+                <div class="photo-name">${photo.name}</div>
+                <button class="remove-photo" onclick="removePhoto('${photo.id}')">×</button>
+            `;
+            preview.appendChild(photoItem);
+        }
+
+        function removePhoto(photoId) {
+            currentPhotos = currentPhotos.filter(p => p.id.toString() !== photoId.toString());
+            document.getElementById('photoPreview').innerHTML = '';
+            currentPhotos.forEach(photo => addPhotoToPreview(photo));
+        }
+
+        function openGoogleDrivePicker() { showNotification('Google Drive integration coming soon!', 'info'); }
+        function closeDriveModal() { document.getElementById('driveModal').style.display = 'none'; }
     </script>
 </body>
 </html>
