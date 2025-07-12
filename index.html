@@ -1585,7 +1585,131 @@
         async function checkEmailQuota() {
             // Implementation for checking email quota...
         }
-        
+
+        // =============================================
+// PHOTO HANDLING
+// =============================================
+function handlePhotoUpload(event) {
+    const files = event.target.files;
+    for (let file of files) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const photoData = {
+                id: Date.now() + '_' + Math.random(),
+                name: file.name,
+                data: e.target.result,
+                size: file.size,
+                type: file.type,
+                source: 'local'
+            };
+            currentPhotos.push(photoData);
+            addPhotoToPreview(photoData);
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function addPhotoToPreview(photo) {
+    const preview = document.getElementById('photoPreview');
+    const photoItem = document.createElement('div');
+    photoItem.className = 'photo-item';
+    photoItem.innerHTML = `
+        <img src="${photo.data}" alt="${photo.name}">
+        <div class="photo-name">${photo.name}</div>
+        <button class="remove-photo" onclick="removePhoto('${photo.id}')">×</button>
+    `;
+    preview.appendChild(photoItem);
+}
+
+function removePhoto(photoId) {
+    currentPhotos = currentPhotos.filter(p => p.id !== photoId);
+    document.getElementById('photoPreview').innerHTML = '';
+    currentPhotos.forEach(photo => addPhotoToPreview(photo));
+}
+
+// Google Drive functions (placeholders for now)
+function openGoogleDrivePicker() {
+    showNotification('Google Drive integration coming soon!', 'info');
+}
+
+function closeDriveModal() {
+    document.getElementById('driveModal').style.display = 'none';
+}
+
+        const invoiceHTML = `
+    <div class="invoice-header">
+        <div class="company-info">
+            <h2>Calvery Services Corp.</h2>
+            <p>P.O. Box 8156<br>
+            Tampa, Florida 33674-8156<br>
+            Phone: 863-329-8339<br>
+            Email: calveryservices007@gmail.com</p>
+        </div>
+        <div class="invoice-details">
+            <div class="invoice-number">INV-${invoiceNumber}</div>
+            <p><strong>Date:</strong> ${currentDate}</p>
+            <p><strong>PO Number:</strong> ${job.poNumber || 'N/A'}</p>
+        </div>
+    </div>
+    
+    <div class="client-section">
+        <div>
+            <h3>Bill To:</h3>
+            <p><strong>${job.cmName}</strong><br>
+            ${job.cmEmail}<br>
+            ${systemConfigs[currentSystem].name}<br>
+            Community: ${job.community}<br>
+            Lot #: ${job.lotNumber}</p>
+        </div>
+    </div>
+    
+    <table class="invoice-table">
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th>Date</th>
+                <th>Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>${job.jobDescription}</td>
+                <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
+                <td>$${job.amountEPO.toFixed(2)}</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <div class="total-section">
+        <div class="total-row">
+            <span class="total-label total-amount">Total:</span>
+            <span class="total-amount">$${job.amountEPO.toFixed(2)}</span>
+        </div>
+    </div>
+`;
+        async function checkEmailQuota() {
+    try {
+        const result = await db._fetch('?action=checkEmailQuota');
+        if (result.success) {
+            const remaining = result.remainingEmails;
+            const total = remaining > 100 ? 1500 : 100;
+            const used = total - remaining;
+            const percent = (used / total) * 100;
+            
+            document.getElementById('emailLimit').textContent = `${total} emails/day`;
+            document.getElementById('emailRemaining').textContent = remaining;
+            document.getElementById('emailQuotaBar').style.width = percent + '%';
+            
+            // Change color based on usage
+            const bar = document.getElementById('emailQuotaBar');
+            if (percent > 90) bar.style.backgroundColor = '#e74c3c';
+            else if (percent > 70) bar.style.backgroundColor = '#f39c12';
+            else bar.style.backgroundColor = '#27ae60';
+        }
+    } catch (error) {
+        document.getElementById('emailQuotaStatus').textContent = 'Email quota check failed';
+    }
+}
         // Other functions (photo handling, Drive integration, etc.) would go here...
         // They are omitted for brevity but should be included from your original file.
 
