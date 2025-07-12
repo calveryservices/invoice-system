@@ -383,6 +383,15 @@
             color: white;
         }
 
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+
+        .btn-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+
         .button-group {
             display: flex;
             gap: 1rem;
@@ -534,13 +543,6 @@
             border-top-color: var(--white);
             animation: spin 1s ease-in-out infinite;
         }
-        .btn .loading {
-             border-top-color: var(--white);
-        }
-        .btn-secondary .loading {
-            border-top-color: var(--white);
-        }
-
 
         @keyframes spin {
             to { transform: rotate(360deg); }
@@ -644,45 +646,6 @@
             color: var(--text-muted);
         }
 
-        .drive-auth-btn {
-            width: 100%;
-            padding: 1rem;
-            background-color: #4285f4;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 1rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-
-        .drive-files {
-            margin-top: 1.5rem;
-        }
-
-        .drive-file {
-            display: flex;
-            align-items: center;
-            padding: 0.75rem;
-            border: 1px solid var(--gray-border);
-            border-radius: 5px;
-            margin-bottom: 0.5rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .drive-file:hover {
-            background-color: var(--light-bg);
-        }
-
-        .drive-file.selected {
-            background-color: rgba(52, 152, 219, 0.1);
-            border-color: var(--secondary-color);
-        }
-        
         #notification-container {
             position: fixed;
             top: 20px;
@@ -701,6 +664,7 @@
             opacity: 0;
             transform: translateX(100%);
             animation: slideIn 0.5s forwards;
+            cursor: pointer;
         }
 
         @keyframes slideIn {
@@ -713,7 +677,43 @@
         .toast-notification.success { background-color: var(--success-color); }
         .toast-notification.error { background-color: var(--danger-color); }
         .toast-notification.info { background-color: var(--secondary-color); }
+        .toast-notification.warning { background-color: var(--warning-color); }
 
+        /* Status Change Modal */
+        .status-options {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .status-option {
+            padding: 1rem;
+            border: 2px solid var(--gray-border);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-option:hover {
+            border-color: var(--secondary-color);
+            background-color: var(--light-bg);
+        }
+
+        .status-option.selected {
+            border-color: var(--secondary-color);
+            background-color: rgba(52, 152, 219, 0.1);
+        }
+
+        /* Edit Form Styles */
+        #editJobId {
+            background-color: var(--light-bg);
+            font-weight: 600;
+            color: var(--primary-color);
+        }
     </style>
 </head>
 <body>
@@ -727,6 +727,35 @@
             <div class="button-group" style="justify-content: flex-end;">
                 <button id="confirmBtnNo" class="btn btn-secondary">No</button>
                 <button id="confirmBtnYes" class="btn btn-danger">Yes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Change Modal -->
+    <div id="statusModal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>Change Job Status</h3>
+                <span class="close-modal" onclick="closeStatusModal()">&times;</span>
+            </div>
+            <p style="margin-bottom: 1rem;">Current Status: <span id="currentStatus" class="status-badge"></span></p>
+            <div class="status-options">
+                <div class="status-option" onclick="selectStatus('Pending')">
+                    <span class="status-badge status-pending">Pending</span>
+                    <span>Job is pending completion</span>
+                </div>
+                <div class="status-option" onclick="selectStatus('Completed')">
+                    <span class="status-badge status-completed">Completed</span>
+                    <span>Job has been completed</span>
+                </div>
+                <div class="status-option" onclick="selectStatus('Invoiced')">
+                    <span class="status-badge status-invoiced">Invoiced</span>
+                    <span>Invoice has been sent</span>
+                </div>
+            </div>
+            <div class="button-group" style="justify-content: flex-end; margin-top: 2rem;">
+                <button class="btn btn-secondary" onclick="closeStatusModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmStatusChange()">Update Status</button>
             </div>
         </div>
     </div>
@@ -794,8 +823,9 @@
         <!-- Job Tracker Tab -->
         <div class="tab-content active" id="trackerTab">
             <div class="form-section">
-                <h3>Add New Job</h3>
+                <h3 id="jobFormTitle">Add New Job</h3>
                 <form id="jobForm">
+                    <input type="hidden" id="editJobId" value="">
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="community">Community *</label>
@@ -864,11 +894,14 @@
                     </div>
 
                     <div class="button-group">
-                        <button type="submit" class="btn btn-primary">
-                            <i>➕</i> Add Job
+                        <button type="submit" class="btn btn-primary" id="jobSubmitBtn">
+                            <i>➕</i> <span>Add Job</span>
                         </button>
                         <button type="button" class="btn btn-secondary" onclick="clearForm()">
                             <i>🔄</i> Clear Form
+                        </button>
+                        <button type="button" class="btn btn-warning" id="cancelEditBtn" onclick="cancelEdit()" style="display:none;">
+                            <i>❌</i> Cancel Edit
                         </button>
                     </div>
                 </form>
@@ -967,7 +1000,7 @@
                     <button class="btn btn-primary" onclick="saveSettings()">
                         <i>💾</i> Save Settings
                     </button>
-                     <button class="btn btn-warning" onclick="testConnection()">
+                    <button class="btn btn-warning" onclick="testConnection()">
                         <i>🧪</i> Test Connection
                     </button>
                 </div>
@@ -999,7 +1032,7 @@
                     <div class="form-group">
                         <label>Current Invoice Number</label>
                         <input type="number" id="currentInvoiceNumber" value="1000">
-                        <small style="color: var(--text-muted);">Next invoice will be: <span id="nextInvoicePreview">1001</span></small>
+                        <small style="color: var(--text-muted);">Next invoice will be: INV-<span id="nextInvoicePreview">1001</span></small>
                     </div>
                 </div>
             </div>
@@ -1032,7 +1065,67 @@
             googleSheets: {
                 apiKey: 'YOUR_GOOGLE_API_KEY',
                 clientId: 'YOUR_GOOGLE_CLIENT_ID',
-                scriptUrl: '' // Loaded from localStorage
+                scriptUrl: '' // This will be loaded from localStorage
+            }
+        };
+
+        // =============================================
+        // GLOBAL VARIABLES
+        // =============================================
+        let currentSystem = '';
+        let currentPhotos = [];
+        let googleAuth = null;
+        let invoiceCounter = 1000;
+        let currentEditingJob = null;
+        let selectedNewStatus = '';
+        let statusChangeJobId = '';
+
+        const systemConfigs = {
+            'lennar-extra': {
+                name: 'Drywall Extra Repairs (Lennar)',
+                cms: {
+                    'Brian': 'brian.morales@lennar.com',
+                    'Daniel': 'daniel.annicelli@lennar.com',
+                    'Dustin': 'dustin.taylor@lennar.com',
+                    'Jacob': 'jacob.peltz@lennar.com',
+                    'Lacey': 'lacey.talley@lennar.com',
+                    'Jason': 'jason.dutra@lennar.com',
+                    'Jose': 'jose.romero@lennar.com',
+                    'Mark': 'mark.molenda@lennar.com',
+                    'Sean': 'sean.mallett@lennar.com',
+                    'Other': 'other'
+                }
+            },
+            'lennar-warranty': {
+                name: 'Warranty Jobs (Lennar)',
+                cms: {
+                    'Brian': 'brian.morales@lennar.com',
+                    'Daniel': 'daniel.annicelli@lennar.com',
+                    'Dustin': 'dustin.taylor@lennar.com',
+                    'Jacob': 'jacob.peltz@lennar.com',
+                    'Lacey': 'lacey.talley@lennar.com',
+                    'Other': 'other'
+                }
+            },
+            'taylor': {
+                name: 'Taylor Morrison Warranty Repairs',
+                cms: {
+                    'Bryan': 'BSantosMontalvo@taylormorrison.com',
+                    'Charlene': 'clively@taylormorrison.com',
+                    'Cristian': 'ccomparini@taylormorrison.com',
+                    'Richie': 'rcassens@taylormorrison.com',
+                    'Shana': 'shbutler@taylormorrison.com',
+                    'Other': 'other'
+                }
+            },
+            'weekley': {
+                name: 'David Weekley Repairs',
+                cms: {
+                    'John': 'john.smith@davidweekley.com',
+                    'Sarah': 'sarah.jones@davidweekley.com',
+                    'Mike': 'mike.wilson@davidweekley.com',
+                    'Other': 'other'
+                }
             }
         };
 
@@ -1044,10 +1137,9 @@
             const notification = document.createElement('div');
             notification.className = `toast-notification ${type}`;
             notification.textContent = message;
+            notification.onclick = () => notification.remove();
             container.appendChild(notification);
-            setTimeout(() => {
-                notification.remove();
-            }, 5000);
+            setTimeout(() => notification.remove(), 5000);
         }
 
         function showConfirmation(message, onConfirm) {
@@ -1077,66 +1169,22 @@
             yesBtn.addEventListener('click', handleYes);
             noBtn.addEventListener('click', handleNo);
         }
-        
+
         // =============================================
         // INITIALIZATION
         // =============================================
         window.onload = function() {
             loadSettings();
-            if (CONFIG.googleSheets.scriptUrl) {
-                testConnection();
-                checkEmailQuota();
-            } else {
-                showNotification('Please configure your Google Apps Script URL in the Settings tab.', 'warning');
-                document.querySelector('.sync-status').textContent = '❌ Not Configured';
-            }
+            checkEmailQuota();
             document.getElementById('currentInvoiceNumber').addEventListener('input', function() {
                 document.getElementById('nextInvoicePreview').textContent = parseInt(this.value) + 1;
             });
             document.getElementById('currentUser').textContent = 'Select a system';
+            document.querySelector('.sync-status').textContent = '❌ Offline';
         };
 
         // =============================================
-        // GLOBAL VARIABLES
-        // =============================================
-        let currentSystem = '';
-        let currentPhotos = [];
-        let googleAuth = null;
-        let invoiceCounter = 1000;
-
-        const systemConfigs = {
-            'lennar-extra': {
-                name: 'Drywall Extra Repairs (Lennar)',
-                cms: {
-                    'Brian': 'brian.morales@lennar.com', 'Daniel': 'daniel.annicelli@lennar.com', 'Dustin': 'dustin.taylor@lennar.com',
-                    'Jacob': 'jacob.peltz@lennar.com', 'Lacey': 'lacey.talley@lennar.com', 'Jason': 'jason.dutra@lennar.com',
-                    'Jose': 'jose.romero@lennar.com', 'Mark': 'mark.molenda@lennar.com', 'Sean': 'sean.mallett@lennar.com', 'Other': 'other'
-                }
-            },
-            'lennar-warranty': {
-                name: 'Warranty Jobs (Lennar)',
-                cms: {
-                    'Brian': 'brian.morales@lennar.com', 'Daniel': 'daniel.annicelli@lennar.com', 'Dustin': 'dustin.taylor@lennar.com',
-                    'Jacob': 'jacob.peltz@lennar.com', 'Lacey': 'lacey.talley@lennar.com', 'Other': 'other'
-                }
-            },
-            'taylor': {
-                name: 'Taylor Morrison Warranty Repairs',
-                cms: {
-                    'Bryan': 'BSantosMontalvo@taylormorrison.com', 'Charlene': 'clively@taylormorrison.com', 'Cristian': 'ccomparini@taylormorrison.com',
-                    'Richie': 'rcassens@taylormorrison.com', 'Shana': 'shbutler@taylormorrison.com', 'Other': 'other'
-                }
-            },
-            'weekley': {
-                name: 'David Weekley Repairs',
-                cms: {
-                    'John': 'john.smith@davidweekley.com', 'Sarah': 'sarah.jones@davidweekley.com', 'Mike': 'mike.wilson@davidweekley.com', 'Other': 'other'
-                }
-            }
-        };
-
-        // =============================================
-        // GOOGLE SHEETS INTEGRATION (API CLASS)
+        // GOOGLE SHEETS INTEGRATION
         // =============================================
         class GoogleSheetsDB {
             constructor() {
@@ -1145,7 +1193,7 @@
 
             async _fetch(endpoint, options = {}) {
                 if (!this.scriptUrl) {
-                   showNotification('Google Apps Script URL is not configured.', 'error');
+                   showNotification('Google Apps Script URL is not configured. Please set it in the Settings tab.', 'error');
                    throw new Error('Script URL not set');
                 }
                 
@@ -1158,34 +1206,14 @@
                 }
 
                 try {
-                    const fetchOptions = options.body ? {
-                        method: 'POST',
-                        mode: 'cors',
-                        body: options.body,
-                        // The redirect: 'follow' is often needed for Apps Script
-                        redirect: 'follow' 
-                    } : { method: 'GET', mode: 'cors' };
-
-                    // Apps Script doesn't handle JSON content type well with CORS, so we send as plain text
-                    if (fetchOptions.body) {
-                        fetchOptions.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
-                    }
-
-                    const response = await fetch(this.scriptUrl + endpoint, fetchOptions);
-                    
+                    const response = await fetch(this.scriptUrl + endpoint, options);
                     if (!response.ok) {
-                        throw new Error(`Network error: ${response.status} ${response.statusText}`);
+                        throw new Error(`Network response was not ok: ${response.status} ${response.statusText}`);
                     }
-                    
-                    const result = await response.json();
-                    if (result.error) {
-                        throw new Error(`Script error: ${result.error}`);
-                    }
-                    return result;
-
+                    return await response.json();
                 } catch (error) {
-                    console.error('API Call Failed:', { endpoint, error });
-                    showNotification(error.message, 'error');
+                    console.error('Fetch Error:', error);
+                    showNotification(`Connection Error: ${error.message}. Check the console for details.`, 'error');
                     throw error;
                 } finally {
                     if (button) {
@@ -1195,36 +1223,63 @@
                 }
             }
 
-            async test() { return this._fetch('?action=test'); }
-            async getEmailQuota() { return this._fetch('?action=checkEmailQuota'); }
-            async getAllJobs(system) { return this._fetch(`?action=getJobs&system=${system}`); }
-            async getInvoices(system) { return this._fetch(`?action=getInvoices&system=${system}`); }
-            async getNextInvoiceNumber() { return this._fetch(`?action=getNextInvoiceNumber`); }
+            async getAllJobs(system) {
+                return this._fetch(`?action=getJobs&system=${system}`);
+            }
 
             async addJob(system, job, button) {
-                const payload = { action: 'addJob', system, job };
-                return this._fetch('', { body: JSON.stringify(payload), button });
+                return this._fetch('', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'addJob', system, job }),
+                    button: button
+                });
             }
+
             async updateJob(system, jobId, updates) {
-                const payload = { action: 'updateJob', system, jobId, updates };
-                return this._fetch('', { body: JSON.stringify(payload) });
+                 return this._fetch('', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'updateJob', system, jobId, updates })
+                });
             }
+
             async deleteJob(system, jobId) {
-                const payload = { action: 'deleteJob', system, jobId };
-                return this._fetch('', { body: JSON.stringify(payload) });
+                 return this._fetch('', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'deleteJob', system, jobId })
+                });
             }
+
+            async getInvoices(system) {
+                return this._fetch(`?action=getInvoices&system=${system}`);
+            }
+
             async addInvoice(system, invoice) {
-                const payload = { action: 'addInvoice', system, invoice };
-                return this._fetch('', { body: JSON.stringify(payload) });
+                 return this._fetch('', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'addInvoice', system, invoice })
+                });
             }
+
+            async getNextInvoiceNumber() {
+                return this._fetch(`?action=getNextInvoiceNumber`);
+            }
+            
             async sendInvoice(invoiceData, button) {
-                const payload = { action: 'sendInvoice', invoiceData };
-                return this._fetch('', { body: JSON.stringify(payload), button });
+                return this._fetch('', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'sendInvoice', invoiceData }),
+                    button: button
+                });
             }
         }
 
         const db = new GoogleSheetsDB();
-        
+
         // =============================================
         // SYSTEM & UI FUNCTIONS
         // =============================================
@@ -1250,6 +1305,14 @@
             currentSystem = '';
             clearForm();
             document.getElementById('currentUser').textContent = 'Select a system';
+            
+            // Reset to first tab
+            document.querySelectorAll('.nav-tab').forEach((tab, index) => {
+                tab.classList.toggle('active', index === 0);
+            });
+            document.querySelectorAll('.tab-content').forEach((content, index) => {
+                content.classList.toggle('active', index === 0);
+            });
         }
 
         function loadCMOptions() {
@@ -1330,9 +1393,12 @@
             if (cmName === 'Other') cmName = document.getElementById('cmNameOther').value;
             if (cmEmail === 'other') cmEmail = document.getElementById('cmEmailOther').value;
             
+            const editJobId = document.getElementById('editJobId').value;
+            const isEditing = editJobId !== '';
+            
             const job = {
-                id: 'JOB-' + Date.now(),
-                timestamp: new Date().toISOString(),
+                id: isEditing ? editJobId : 'JOB-' + Date.now(),
+                timestamp: isEditing ? currentEditingJob.timestamp : new Date().toISOString(),
                 community: formData.get('community'),
                 lotNumber: formData.get('lotNumber'),
                 cmName: cmName,
@@ -1347,14 +1413,29 @@
             };
             
             try {
-                const result = await db.addJob(currentSystem, job, submitButton);
-                if (result.success) {
-                    showNotification('Job added successfully!', 'success');
-                    clearForm();
-                    loadJobs();
+                if (isEditing) {
+                    // For editing, we delete the old and add the new
+                    await db.deleteJob(currentSystem, editJobId);
+                    const result = await db.addJob(currentSystem, job, submitButton);
+                    if (result.success) {
+                        showNotification('Job updated successfully!', 'success');
+                        cancelEdit();
+                        loadJobs();
+                    } else {
+                        showNotification(`Error updating job: ${result.error}`, 'error');
+                    }
+                } else {
+                    const result = await db.addJob(currentSystem, job, submitButton);
+                    if (result.success) {
+                        showNotification('Job added successfully!', 'success');
+                        clearForm();
+                        loadJobs();
+                    } else {
+                        showNotification(`Error adding job: ${result.error}`, 'error');
+                    }
                 }
             } catch (error) {
-                // Error handled by _fetch
+                // Error already handled by _fetch
             }
         });
 
@@ -1364,6 +1445,11 @@
                 const jobs = result.jobs || [];
                 const tbody = document.getElementById('jobsTableBody');
                 tbody.innerHTML = '';
+                
+                if (jobs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9">No jobs found. Add your first job above!</td></tr>';
+                    return;
+                }
                 
                 jobs.forEach(job => {
                     const row = document.createElement('tr');
@@ -1377,8 +1463,9 @@
                         <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
                         <td>$${parseFloat(job.amountEPO).toFixed(2)}</td>
                         <td>
-                            <button class="btn btn-sm btn-primary no-print" onclick="editJob(event, '${job.id}')">Edit</button>
-                            <button class="btn btn-sm btn-danger no-print" onclick="deleteJob('${job.id}')">Delete</button>
+                            <button class="btn btn-small btn-primary" onclick="editJob('${job.id}')">Edit</button>
+                            <button class="btn btn-small btn-success" onclick="changeStatus('${job.id}', '${job.status}')">Status</button>
+                            <button class="btn btn-small btn-danger" onclick="deleteJob('${job.id}')">Delete</button>
                         </td>
                     `;
                     tbody.appendChild(row);
@@ -1396,8 +1483,119 @@
             document.getElementById('cmEmailOther').style.display = 'none';
         }
 
-        async function editJob(event, jobId) {
-            showNotification('Edit functionality coming soon!', 'info');
+        async function editJob(jobId) {
+            try {
+                const result = await db.getAllJobs(currentSystem);
+                const job = (result.jobs || []).find(j => j.id === jobId);
+                if (!job) {
+                    showNotification('Job not found', 'error');
+                    return;
+                }
+                
+                currentEditingJob = job;
+                
+                // Update form title and button
+                document.getElementById('jobFormTitle').textContent = 'Edit Job';
+                document.getElementById('jobSubmitBtn').innerHTML = '<i>💾</i> <span>Update Job</span>';
+                document.getElementById('cancelEditBtn').style.display = 'inline-flex';
+                document.getElementById('editJobId').value = job.id;
+                
+                // Fill form with job data
+                document.getElementById('community').value = job.community;
+                document.getElementById('lotNumber').value = job.lotNumber;
+                document.getElementById('status').value = job.status;
+                document.getElementById('jobDescription').value = job.jobDescription;
+                document.getElementById('dateJobDone').value = job.dateJobDone;
+                document.getElementById('amountEPO').value = job.amountEPO;
+                document.getElementById('poNumber').value = job.poNumber || '';
+                
+                // Handle CM selection
+                const config = systemConfigs[currentSystem];
+                if (config.cms[job.cmName]) {
+                    document.getElementById('cmName').value = job.cmName;
+                    document.getElementById('cmEmail').value = job.cmEmail;
+                } else {
+                    document.getElementById('cmName').value = 'Other';
+                    document.getElementById('cmNameOther').value = job.cmName;
+                    document.getElementById('cmNameOther').style.display = 'block';
+                    document.getElementById('cmEmail').value = 'other';
+                    document.getElementById('cmEmailOther').value = job.cmEmail;
+                    document.getElementById('cmEmailOther').style.display = 'block';
+                }
+                
+                // Load photos
+                currentPhotos = job.photos || [];
+                refreshPhotoPreview();
+                
+                // Scroll to form
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (error) {
+                showNotification('Error loading job for editing', 'error');
+            }
+        }
+
+        function cancelEdit() {
+            document.getElementById('jobFormTitle').textContent = 'Add New Job';
+            document.getElementById('jobSubmitBtn').innerHTML = '<i>➕</i> <span>Add Job</span>';
+            document.getElementById('cancelEditBtn').style.display = 'none';
+            document.getElementById('editJobId').value = '';
+            currentEditingJob = null;
+            clearForm();
+        }
+
+        function changeStatus(jobId, currentStatus) {
+            statusChangeJobId = jobId;
+            selectedNewStatus = '';
+            
+            // Open status modal
+            const modal = document.getElementById('statusModal');
+            modal.style.display = 'flex';
+            
+            // Show current status
+            const currentStatusElement = document.getElementById('currentStatus');
+            currentStatusElement.textContent = currentStatus;
+            currentStatusElement.className = `status-badge status-${currentStatus.toLowerCase()}`;
+            
+            // Reset status options
+            document.querySelectorAll('.status-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+        }
+
+        function selectStatus(status) {
+            selectedNewStatus = status;
+            document.querySelectorAll('.status-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+        }
+
+        function closeStatusModal() {
+            document.getElementById('statusModal').style.display = 'none';
+            statusChangeJobId = '';
+            selectedNewStatus = '';
+        }
+
+        async function confirmStatusChange() {
+            if (!selectedNewStatus) {
+                showNotification('Please select a new status', 'warning');
+                return;
+            }
+            
+            try {
+                const updates = { status: selectedNewStatus };
+                const result = await db.updateJob(currentSystem, statusChangeJobId, updates);
+                
+                if (result.success) {
+                    showNotification(`Status changed to: ${selectedNewStatus}`, 'success');
+                    loadJobs();
+                    closeStatusModal();
+                } else {
+                    showNotification('Error updating status. Please try again.', 'error');
+                }
+            } catch (error) {
+                // Error handled by _fetch
+            }
         }
 
         function deleteJob(jobId) {
@@ -1407,13 +1605,78 @@
                     if (result.success) {
                         showNotification('Job deleted successfully!', 'success');
                         loadJobs();
+                    } else {
+                        showNotification(`Error deleting job: ${result.error}`, 'error');
                     }
                 } catch (error) {
-                    // Error handled by _fetch
+                    // Notification handled by _fetch
                 }
             });
         }
-        
+
+        // =============================================
+        // PHOTO HANDLING
+        // =============================================
+        function handlePhotoUpload(event) {
+            const files = event.target.files;
+            for (let file of files) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const photoData = {
+                        id: Date.now() + '_' + Math.random(),
+                        name: file.name,
+                        data: e.target.result,
+                        size: file.size,
+                        type: file.type,
+                        source: 'local'
+                    };
+                    currentPhotos.push(photoData);
+                    addPhotoToPreview(photoData);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function addPhotoToPreview(photo) {
+            const preview = document.getElementById('photoPreview');
+            const photoItem = document.createElement('div');
+            photoItem.className = 'photo-item';
+            photoItem.innerHTML = `
+                <img src="${photo.data}" alt="${photo.name}">
+                <div class="photo-name">${photo.name}</div>
+                <button class="remove-photo" onclick="removePhoto('${photo.id}')">×</button>
+            `;
+            preview.appendChild(photoItem);
+        }
+
+        function removePhoto(photoId) {
+            currentPhotos = currentPhotos.filter(p => p.id !== photoId);
+            refreshPhotoPreview();
+        }
+
+        function refreshPhotoPreview() {
+            const preview = document.getElementById('photoPreview');
+            preview.innerHTML = '';
+            currentPhotos.forEach(photo => addPhotoToPreview(photo));
+        }
+
+        // Google Drive functions (placeholders for now)
+        function openGoogleDrivePicker() {
+            showNotification('Google Drive integration coming soon!', 'info');
+        }
+
+        function closeDriveModal() {
+            document.getElementById('driveModal').style.display = 'none';
+        }
+
+        function authenticateGoogleDrive() {
+            showNotification('Google Drive authentication coming soon!', 'info');
+        }
+
+        function selectDrivePhotos() {
+            showNotification('Google Drive photo selection coming soon!', 'info');
+        }
+
         // =============================================
         // INVOICE GENERATION
         // =============================================
@@ -1452,53 +1715,103 @@
             try {
                 const jobsResult = await db.getAllJobs(currentSystem);
                 const job = (jobsResult.jobs || []).find(j => j.id === jobId);
-                if (!job) {
-                    showNotification('Could not find the selected job.', 'error');
-                    return;
-                }
+                if (!job) return;
 
                 const invoiceNumResult = await db.getNextInvoiceNumber();
-                const invoiceNumber = invoiceNumResult.nextNumber;
+                const invoiceNumber = 'INV-' + invoiceNumResult.nextNumber;
                 const currentDate = new Date().toLocaleDateString();
                 
                 const invoiceHTML = `
                     <div class="invoice-header">
                         <div class="company-info">
                             <h2>Calvery Services Corp.</h2>
-                            <p>P.O. Box 8156<br>Tampa, Florida 33674-8156<br>Phone: 863-329-8339<br>Email: calveryservices007@gmail.com</p>
+                            <p>P.O. Box 8156<br>
+                            Tampa, Florida 33674-8156<br>
+                            Phone: 863-329-8339<br>
+                            Email: calveryservices007@gmail.com</p>
                         </div>
                         <div class="invoice-details">
-                            <div class="invoice-number">INV-${invoiceNumber}</div>
+                            <div class="invoice-number">${invoiceNumber}</div>
                             <p><strong>Date:</strong> ${currentDate}</p>
                             <p><strong>PO Number:</strong> ${job.poNumber || 'N/A'}</p>
                         </div>
                     </div>
+                    
                     <div class="client-section">
                         <div>
                             <h3>Bill To:</h3>
-                            <p><strong>${job.cmName}</strong><br>${job.cmEmail}<br>${systemConfigs[currentSystem].name}<br>Community: ${job.community}<br>Lot #: ${job.lotNumber}</p>
+                            <p><strong>${job.cmName}</strong><br>
+                            ${job.cmEmail}<br>
+                            ${systemConfigs[currentSystem].name}<br>
+                            Community: ${job.community}<br>
+                            Lot #: ${job.lotNumber}</p>
+                        </div>
+                        <div>
+                            <h3>Job Details:</h3>
+                            <p><strong>Job ID:</strong> ${job.id}<br>
+                            <strong>Job Date:</strong> ${new Date(job.dateJobDone).toLocaleDateString()}<br>
+                            <strong>Status:</strong> ${job.status}</p>
                         </div>
                     </div>
+                    
                     <table class="invoice-table">
-                        <thead><tr><th>Description</th><th>Date</th><th>Amount</th></tr></thead>
-                        <tbody><tr>
-                            <td>${job.jobDescription}</td>
-                            <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
-                            <td>$${parseFloat(job.amountEPO).toFixed(2)}</td>
-                        </tr></tbody>
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Date</th>
+                                <th>Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <strong>${systemConfigs[currentSystem].name}</strong><br>
+                                    ${job.jobDescription}
+                                    ${job.photos && job.photos.length > 0 ? `<br><em>Photos attached (${job.photos.length})</em>` : ''}
+                                </td>
+                                <td>${new Date(job.dateJobDone).toLocaleDateString()}</td>
+                                <td>$${parseFloat(job.amountEPO).toFixed(2)}</td>
+                            </tr>
+                        </tbody>
                     </table>
+                    
                     <div class="total-section">
+                        <div class="total-row">
+                            <span class="total-label">Subtotal:</span>
+                            <span>$${parseFloat(job.amountEPO).toFixed(2)}</span>
+                        </div>
+                        <div class="total-row">
+                            <span class="total-label">Tax (0%):</span>
+                            <span>$0.00</span>
+                        </div>
                         <div class="total-row">
                             <span class="total-label total-amount">Total:</span>
                             <span class="total-amount">$${parseFloat(job.amountEPO).toFixed(2)}</span>
                         </div>
-                    </div>`;
+                    </div>
+                    
+                    ${job.photos && job.photos.length > 0 ? `
+                    <div style="margin-top: 2rem; page-break-before: always;">
+                        <h3>Job Photos</h3>
+                        <div class="photo-grid">
+                            ${job.photos.map(photo => `
+                                <img src="${photo.data}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 5px;">
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    <div style="margin-top: 3rem; text-align: center; color: var(--text-muted);">
+                        <p><strong>Thank you for your business!</strong></p>
+                        <p>Please remit payment within 30 days of invoice date.</p>
+                    </div>
+                `;
                 
                 document.getElementById('invoicePreview').innerHTML = invoiceHTML;
                 document.getElementById('invoicePreview').style.display = 'block';
                 document.getElementById('invoiceActions').style.display = 'flex';
 
-                window.currentInvoiceData = { job, invoiceNumber: `INV-${invoiceNumber}` };
+                window.currentInvoiceData = { job, invoiceNumber, invoiceHTML };
             } catch (error) {
                 showNotification('Could not generate invoice preview.', 'error');
             }
@@ -1513,7 +1826,7 @@
             
             showConfirmation('Are you sure you want to email this invoice?', async () => {
                 const { job, invoiceNumber } = window.currentInvoiceData;
-                const invoiceDataForEmail = {
+                const invoiceData = {
                     invoiceNumber,
                     invoiceDate: new Date().toLocaleDateString(),
                     cmName: job.cmName,
@@ -1526,26 +1839,44 @@
                 };
 
                 try {
-                    const result = await db.sendInvoice(invoiceDataForEmail, sendButton);
+                    const result = await db.sendInvoice(invoiceData, sendButton);
                     if (result.success) {
-                        const invoiceRecord = {
-                            invoiceNumber, dateSent: new Date().toISOString(),
-                            jobId: job.id, community: job.community, lotNumber: job.lotNumber,
-                            cmName: job.cmName, cmEmail: job.cmEmail, amount: job.amountEPO,
-                            status: 'Sent', system: currentSystem
+                        // Create invoice record
+                        const invoice = {
+                            invoiceNumber: invoiceNumber,
+                            dateSent: new Date().toISOString(),
+                            jobId: job.id,
+                            community: job.community,
+                            lotNumber: job.lotNumber,
+                            cmName: job.cmName,
+                            cmEmail: job.cmEmail,
+                            amount: parseFloat(job.amountEPO),
+                            status: 'Sent',
+                            system: currentSystem
                         };
-                        await db.addInvoice(currentSystem, invoiceRecord);
+                        
+                        await db.addInvoice(currentSystem, invoice);
                         await db.updateJob(currentSystem, job.id, { status: 'Invoiced' });
                         
-                        showNotification(`Invoice ${invoiceNumber} sent successfully!`, 'success');
+                        showNotification(`Invoice ${invoiceNumber} sent successfully! Emails remaining today: ${result.remainingQuota}`, 'success');
+                        
+                        // Update invoice counter
+                        invoiceCounter = parseInt(invoiceNumber.split('-')[1]);
+                        localStorage.setItem('invoiceCounter', invoiceCounter.toString());
+                        
+                        // Reset form
+                        document.getElementById('selectJob').value = '';
+                        document.getElementById('invoicePreview').style.display = 'none';
+                        document.getElementById('invoiceActions').style.display = 'none';
                         
                         loadJobs();
                         loadJobsForInvoicing();
-                        document.getElementById('invoicePreview').style.display = 'none';
-                        document.getElementById('invoiceActions').style.display = 'none';
+                        checkEmailQuota();
+                    } else {
+                         showNotification(`Failed to send invoice: ${result.error}`, 'error');
                     }
                 } catch(error) {
-                    // Error handled by _fetch
+                    // Handled by _fetch
                 }
             });
         }
@@ -1564,6 +1895,11 @@
                 const tbody = document.getElementById('recordsTableBody');
                 tbody.innerHTML = '';
                 
+                if (invoices.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8">No invoices sent yet.</td></tr>';
+                    return;
+                }
+                
                 invoices.forEach(invoice => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
@@ -1574,13 +1910,24 @@
                         <td>${invoice.cmName}</td>
                         <td>$${parseFloat(invoice.amount).toFixed(2)}</td>
                         <td><span class="status-badge status-invoiced">${invoice.status}</span></td>
-                        <td><button class="btn btn-sm btn-secondary no-print">View</button></td>
+                        <td>
+                            <button class="btn btn-small btn-primary" onclick="resendInvoice('${invoice.invoiceNumber}')">Resend</button>
+                            <button class="btn btn-small btn-secondary" onclick="viewInvoice('${invoice.invoiceNumber}')">View</button>
+                        </td>
                     `;
                     tbody.appendChild(row);
                 });
             } catch (error) {
-                 document.getElementById('recordsTableBody').innerHTML = `<tr><td colspan="8">Could not load records.</td></tr>`;
+                document.getElementById('recordsTableBody').innerHTML = '<tr><td colspan="8">Could not load invoice records.</td></tr>';
             }
+        }
+
+        function resendInvoice(invoiceNumber) {
+            showNotification('Resend functionality coming soon!', 'info');
+        }
+
+        function viewInvoice(invoiceNumber) {
+            showNotification('View functionality coming soon!', 'info');
         }
 
         function saveSettings() {
@@ -1589,61 +1936,64 @@
                 currentInvoiceNumber: document.getElementById('currentInvoiceNumber').value
             };
             
-            if (!settings.scriptUrl || !settings.scriptUrl.includes('macros/s')) {
-                showNotification('Please enter a valid Google Apps Script URL.', 'error');
-                return;
-            }
-
             localStorage.setItem('invoiceSystemSettings', JSON.stringify(settings));
             invoiceCounter = parseInt(settings.currentInvoiceNumber);
             CONFIG.googleSheets.scriptUrl = settings.scriptUrl;
             db.scriptUrl = settings.scriptUrl;
             
             document.getElementById('nextInvoicePreview').textContent = invoiceCounter + 1;
-            showNotification('Settings saved!', 'success');
+            showNotification('Settings saved successfully!', 'success');
             testConnection();
         }
 
         function loadSettings() {
-            const savedSettings = JSON.parse(localStorage.getItem('invoiceSystemSettings') || '{}');
-            document.getElementById('scriptUrl').value = savedSettings.scriptUrl || '';
-            document.getElementById('currentInvoiceNumber').value = savedSettings.currentInvoiceNumber || '1000';
-            
-            invoiceCounter = parseInt(savedSettings.currentInvoiceNumber || '1000');
-            CONFIG.googleSheets.scriptUrl = savedSettings.scriptUrl || '';
-            db.scriptUrl = savedSettings.scriptUrl || '';
+            const savedSettings = localStorage.getItem('invoiceSystemSettings');
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+                document.getElementById('scriptUrl').value = settings.scriptUrl || '';
+                document.getElementById('currentInvoiceNumber').value = settings.currentInvoiceNumber || '1000';
+                
+                invoiceCounter = parseInt(settings.currentInvoiceNumber || '1000');
+                CONFIG.googleSheets.scriptUrl = settings.scriptUrl || '';
+                db.scriptUrl = settings.scriptUrl || '';
+            }
             document.getElementById('nextInvoicePreview').textContent = invoiceCounter + 1;
         }
         
         async function testConnection() {
             const syncStatus = document.querySelector('.sync-status');
             syncStatus.textContent = '🔄 Testing...';
+            
             try {
-                const result = await db.test();
+                const result = await db._fetch('?action=test');
                 if (result.status && result.status.includes('connected')) {
                     syncStatus.textContent = '✅ Connected';
-                    showNotification('Connection successful!', 'success');
+                    showNotification('Connection to Google Apps Script successful!', 'success');
                 } else {
                     throw new Error('Invalid response from script');
                 }
             } catch (error) {
                 syncStatus.textContent = '❌ Connection Failed';
+                showNotification('Connection failed. Check Script URL and deployment.', 'error');
             }
         }
-        
+
         async function checkEmailQuota() {
             try {
-                const result = await db.getEmailQuota();
+                const result = await db._fetch('?action=checkEmailQuota');
                 if (result.success) {
                     const remaining = result.remainingEmails;
                     const total = remaining > 100 ? 1500 : 100;
                     const used = total - remaining;
-                    const percent = total > 0 ? (used / total) * 100 : 0;
+                    const percent = (used / total) * 100;
                     
+                    document.getElementById('emailQuotaStatus').textContent = 'Email Quota Status';
                     document.getElementById('emailLimit').textContent = `${total} emails/day`;
                     document.getElementById('emailRemaining').textContent = remaining;
+                    document.getElementById('emailUsageStatus').textContent = `Emails: ${used}/${total}`;
                     document.getElementById('emailQuotaBar').style.width = percent + '%';
                     
+                    // Change color based on usage
                     const bar = document.getElementById('emailQuotaBar');
                     if (percent > 90) bar.style.backgroundColor = '#e74c3c';
                     else if (percent > 70) bar.style.backgroundColor = '#f39c12';
@@ -1651,52 +2001,9 @@
                 }
             } catch (error) {
                 document.getElementById('emailQuotaStatus').textContent = 'Email quota check failed';
+                document.getElementById('emailUsageStatus').textContent = 'Emails: Unknown';
             }
         }
-
-        // =============================================
-        // PHOTO & DRIVE FUNCTIONS
-        // =============================================
-        function handlePhotoUpload(event) {
-            const files = event.target.files;
-            for (let file of files) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const photoData = {
-                        id: Date.now() + '_' + Math.random(),
-                        name: file.name,
-                        data: e.target.result,
-                        size: file.size,
-                        type: file.type,
-                        source: 'local'
-                    };
-                    currentPhotos.push(photoData);
-                    addPhotoToPreview(photoData);
-                };
-                reader.readAsDataURL(file);
-            }
-        }
-
-        function addPhotoToPreview(photo) {
-            const preview = document.getElementById('photoPreview');
-            const photoItem = document.createElement('div');
-            photoItem.className = 'photo-item';
-            photoItem.innerHTML = `
-                <img src="${photo.data}" alt="${photo.name}">
-                <div class="photo-name">${photo.name}</div>
-                <button class="remove-photo" onclick="removePhoto('${photo.id}')">×</button>
-            `;
-            preview.appendChild(photoItem);
-        }
-
-        function removePhoto(photoId) {
-            currentPhotos = currentPhotos.filter(p => p.id.toString() !== photoId.toString());
-            document.getElementById('photoPreview').innerHTML = '';
-            currentPhotos.forEach(photo => addPhotoToPreview(photo));
-        }
-
-        function openGoogleDrivePicker() { showNotification('Google Drive integration coming soon!', 'info'); }
-        function closeDriveModal() { document.getElementById('driveModal').style.display = 'none'; }
     </script>
 </body>
 </html>
