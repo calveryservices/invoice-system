@@ -1171,17 +1171,32 @@
         }
 
         // =============================================
-        // INITIALIZATION
-        // =============================================
-        window.onload = function() {
-            loadSettings();
-            checkEmailQuota();
-            document.getElementById('currentInvoiceNumber').addEventListener('input', function() {
-                document.getElementById('nextInvoicePreview').textContent = parseInt(this.value) + 1;
-            });
-            document.getElementById('currentUser').textContent = 'Select a system';
-            document.querySelector('.sync-status').textContent = '❌ Offline';
-        };
+// INITIALIZATION
+// =============================================
+window.onload = function() {
+    // Load settings first
+    loadSettings();
+    
+    // If we have a script URL saved, test the connection automatically
+    if (CONFIG.googleSheets.scriptUrl && CONFIG.googleSheets.scriptUrl !== '') {
+        // Update the database connection
+        db.scriptUrl = CONFIG.googleSheets.scriptUrl;
+        
+        // Test connection automatically
+        setTimeout(() => {
+            testConnection();
+        }, 500);
+    } else {
+        // No script URL saved
+        document.querySelector('.sync-status').textContent = '❌ Not Configured';
+        document.getElementById('currentUser').textContent = 'Select a system';
+    }
+    
+    // Set up invoice number preview
+    document.getElementById('currentInvoiceNumber').addEventListener('input', function() {
+        document.getElementById('nextInvoicePreview').textContent = parseInt(this.value) + 1;
+    });
+};
 
         // =============================================
         // GOOGLE SHEETS INTEGRATION
@@ -1947,36 +1962,55 @@
         }
 
         function loadSettings() {
-            const savedSettings = localStorage.getItem('invoiceSystemSettings');
-            if (savedSettings) {
-                const settings = JSON.parse(savedSettings);
-                document.getElementById('scriptUrl').value = settings.scriptUrl || '';
-                document.getElementById('currentInvoiceNumber').value = settings.currentInvoiceNumber || '1000';
-                
-                invoiceCounter = parseInt(settings.currentInvoiceNumber || '1000');
-                CONFIG.googleSheets.scriptUrl = settings.scriptUrl || '';
-                db.scriptUrl = settings.scriptUrl || '';
-            }
-            document.getElementById('nextInvoicePreview').textContent = invoiceCounter + 1;
-        }
+    const savedSettings = localStorage.getItem('invoiceSystemSettings');
+    if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
         
-        async function testConnection() {
-            const syncStatus = document.querySelector('.sync-status');
-            syncStatus.textContent = '🔄 Testing...';
-            
-            try {
-                const result = await db._fetch('?action=test');
-                if (result.status && result.status.includes('connected')) {
-                    syncStatus.textContent = '✅ Connected';
-                    showNotification('Connection to Google Apps Script successful!', 'success');
-                } else {
-                    throw new Error('Invalid response from script');
-                }
-            } catch (error) {
-                syncStatus.textContent = '❌ Connection Failed';
-                showNotification('Connection failed. Check Script URL and deployment.', 'error');
-            }
+        // Update form fields
+        document.getElementById('scriptUrl').value = settings.scriptUrl || '';
+        document.getElementById('currentInvoiceNumber').value = settings.currentInvoiceNumber || '1000';
+        
+        // Update configuration
+        invoiceCounter = parseInt(settings.currentInvoiceNumber || '1000');
+        CONFIG.googleSheets.scriptUrl = settings.scriptUrl || '';
+        
+        // IMPORTANT: Update the database instance
+        if (settings.scriptUrl) {
+            db.scriptUrl = settings.scriptUrl;
         }
+    }
+    
+    // Update next invoice preview
+    document.getElementById('nextInvoicePreview').textContent = invoiceCounter + 1;
+}
+        
+       async function testConnection() {
+    const syncStatus = document.querySelector('.sync-status');
+    syncStatus.textContent = '🔄 Connecting...';
+    
+    // Also check email quota when testing connection
+    let quotaCheckPromise = checkEmailQuota();
+    
+    try {
+        const result = await db._fetch('?action=test');
+        if (result.status && result.status.includes('connected')) {
+            syncStatus.textContent = '✅ Connected';
+            showNotification('Connected to Google Apps Script!', 'success');
+            
+            // Wait for quota check to complete
+            await quotaCheckPromise;
+        } else {
+            throw new Error('Invalid response from script');
+        }
+    } catch (error) {
+        syncStatus.textContent = '❌ Connection Failed';
+        console.error('Connection test failed:', error);
+        // Don't show notification on page load if it fails
+        if (document.readyState === 'complete') {
+            showNotification('Connection failed. Check Script URL and deployment.', 'error');
+        }
+    }
+}
 
         async function checkEmailQuota() {
             try {
