@@ -942,11 +942,9 @@
                         <option value="">Select a completed job...</option>
                     </select>
                 </div>
-
                 <div id="invoicePreview" class="invoice-preview" style="display: none;">
                     <!-- Invoice preview will be generated here -->
                 </div>
-
                 <div class="button-group" id="invoiceActions" style="display: none;">
                     <button class="btn btn-success" onclick="sendInvoice(event)">
                         <i>📧</i> Send Invoice via Email
@@ -995,7 +993,6 @@
                         <small style="color: var(--text-muted);">From Google Apps Script deployment</small>
                     </div>
                 </div>
-
                 <div class="button-group">
                     <button class="btn btn-primary" onclick="saveSettings()">
                         <i>💾</i> Save Settings
@@ -1160,7 +1157,7 @@
                 modal.style.display = 'none';
                 cleanup();
             };
-            
+
             const cleanup = () => {
                 yesBtn.removeEventListener('click', handleYes);
                 noBtn.removeEventListener('click', handleNo);
@@ -1171,32 +1168,32 @@
         }
 
         // =============================================
-// INITIALIZATION
-// =============================================
-window.onload = function() {
-    // Load settings first
-    loadSettings();
-    
-    // If we have a script URL saved, test the connection automatically
-    if (CONFIG.googleSheets.scriptUrl && CONFIG.googleSheets.scriptUrl !== '') {
-        // Update the database connection
-        db.scriptUrl = CONFIG.googleSheets.scriptUrl;
-        
-        // Test connection automatically
-        setTimeout(() => {
-            testConnection();
-        }, 500);
-    } else {
-        // No script URL saved
-        document.querySelector('.sync-status').textContent = '❌ Not Configured';
-        document.getElementById('currentUser').textContent = 'Select a system';
-    }
-    
-    // Set up invoice number preview
-    document.getElementById('currentInvoiceNumber').addEventListener('input', function() {
-        document.getElementById('nextInvoicePreview').textContent = parseInt(this.value) + 1;
-    });
-};
+        // INITIALIZATION
+        // =============================================
+        window.onload = function() {
+            // Load settings first
+            loadSettings();
+            
+            // If we have a script URL saved, test the connection automatically
+            if (CONFIG.googleSheets.scriptUrl && CONFIG.googleSheets.scriptUrl !== '') {
+                // Update the database connection
+                db.scriptUrl = CONFIG.googleSheets.scriptUrl;
+                
+                // Test connection automatically
+                setTimeout(() => {
+                    testConnection();
+                }, 500);
+            } else {
+                // No script URL saved
+                document.querySelector('.sync-status').textContent = '❌ Not Configured';
+                document.getElementById('currentUser').textContent = 'Select a system';
+            }
+            
+            // Set up invoice number preview
+            document.getElementById('currentInvoiceNumber').addEventListener('input', function() {
+                document.getElementById('nextInvoicePreview').textContent = parseInt(this.value) + 1;
+            });
+        };
 
         // =============================================
         // GOOGLE SHEETS INTEGRATION
@@ -1208,12 +1205,13 @@ window.onload = function() {
 
             async _fetch(endpoint, options = {}) {
                 if (!this.scriptUrl) {
-                   showNotification('Google Apps Script URL is not configured. Please set it in the Settings tab.', 'error');
-                   throw new Error('Script URL not set');
+                    showNotification('Google Apps Script URL is not configured. Please set it in the Settings tab.', 'error');
+                    throw new Error('Script URL not set');
                 }
-                
+
                 const button = options.button;
                 let originalContent = '';
+                
                 if (button) {
                     originalContent = button.innerHTML;
                     button.innerHTML = '<span class="loading"></span>';
@@ -1221,14 +1219,33 @@ window.onload = function() {
                 }
 
                 try {
-                    const response = await fetch(this.scriptUrl + endpoint, options);
-                    if (!response.ok) {
-                        throw new Error(`Network response was not ok: ${response.status} ${response.statusText}`);
+                    const fetchOptions = options.body ? {
+                        method: 'POST',
+                        mode: 'cors',
+                        body: options.body,
+                        redirect: 'follow'
+                    } : { method: 'GET', mode: 'cors' };
+                    
+                    if (fetchOptions.body) {
+                        fetchOptions.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
                     }
-                    return await response.json();
+
+                    const response = await fetch(this.scriptUrl + endpoint, fetchOptions);
+                    
+                    if (!response.ok) {
+                        throw new Error(`Network error: ${response.status} ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    if (result.error) {
+                        throw new Error(`Script error: ${result.error}`);
+                    }
+
+                    return result;
                 } catch (error) {
-                    console.error('Fetch Error:', error);
-                    showNotification(`Connection Error: ${error.message}. Check the console for details.`, 'error');
+                    console.error('API Call Failed:', { endpoint, error });
+                    showNotification(error.message, 'error');
                     throw error;
                 } finally {
                     if (button) {
@@ -1238,58 +1255,35 @@ window.onload = function() {
                 }
             }
 
-            async getAllJobs(system) {
-                return this._fetch(`?action=getJobs&system=${system}`);
-            }
-
+            async test() { return this._fetch('?action=test'); }
+            async getEmailQuota() { return this._fetch('?action=checkEmailQuota'); }
+            async getAllJobs(system) { return this._fetch(`?action=getJobs&system=${system}`); }
+            async getInvoices(system) { return this._fetch(`?action=getInvoices&system=${system}`); }
+            async getNextInvoiceNumber() { return this._fetch(`?action=getNextInvoiceNumber`); }
+            
             async addJob(system, job, button) {
-                return this._fetch('', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'addJob', system, job }),
-                    button: button
-                });
-            }
-
-            async updateJob(system, jobId, updates) {
-                 return this._fetch('', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'updateJob', system, jobId, updates })
-                });
-            }
-
-            async deleteJob(system, jobId) {
-                 return this._fetch('', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'deleteJob', system, jobId })
-                });
-            }
-
-            async getInvoices(system) {
-                return this._fetch(`?action=getInvoices&system=${system}`);
-            }
-
-            async addInvoice(system, invoice) {
-                 return this._fetch('', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'addInvoice', system, invoice })
-                });
-            }
-
-            async getNextInvoiceNumber() {
-                return this._fetch(`?action=getNextInvoiceNumber`);
+                const payload = { action: 'addJob', system, job };
+                return this._fetch('', { body: JSON.stringify(payload), button });
             }
             
-            async sendInvoice(invoiceData, button) {
-                return this._fetch('', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'sendInvoice', invoiceData }),
-                    button: button
-                });
+            async updateJob(system, jobId, updates) {
+                const payload = { action: 'updateJob', system, jobId, updates };
+                return this._fetch('', { body: JSON.stringify(payload) });
+            }
+            
+            async deleteJob(system, jobId) {
+                const payload = { action: 'deleteJob', system, jobId };
+                return this._fetch('', { body: JSON.stringify(payload) });
+            }
+            
+            async addInvoice(system, invoice) {
+                const payload = { action: 'addInvoice', system, invoice };
+                return this._fetch('', { body: JSON.stringify(payload) });
+            }
+            
+            async sendInvoice(invoiceData, photos, button) {
+                const payload = { action: 'sendInvoice', invoiceData, photos };
+                return this._fetch('', { body: JSON.stringify(payload), button });
             }
         }
 
@@ -1309,6 +1303,7 @@ window.onload = function() {
             
             loadCMOptions();
             loadJobs();
+            
             document.getElementById('currentUser').textContent = `${systemConfigs[system].name}`;
         }
 
@@ -1316,7 +1311,6 @@ window.onload = function() {
             document.getElementById('mainContainer').classList.remove('active');
             document.getElementById('systemSelector').style.display = 'block';
             document.getElementById('homeButton').style.display = 'none';
-            
             currentSystem = '';
             clearForm();
             document.getElementById('currentUser').textContent = 'Select a system';
@@ -1363,7 +1357,6 @@ window.onload = function() {
             const emailSelect = document.getElementById('cmEmail');
             const nameOther = document.getElementById('cmNameOther');
             const emailOther = document.getElementById('cmEmailOther');
-            
             const selectedName = nameSelect.value;
             const config = systemConfigs[currentSystem];
             
@@ -1399,8 +1392,8 @@ window.onload = function() {
         // =============================================
         document.getElementById('jobForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            const submitButton = e.target.querySelector('button[type="submit"]');
             
+            const submitButton = e.target.querySelector('button[type="submit"]');
             const formData = new FormData(e.target);
             let cmName = formData.get('cmName');
             let cmEmail = formData.get('cmEmail');
@@ -1502,6 +1495,7 @@ window.onload = function() {
             try {
                 const result = await db.getAllJobs(currentSystem);
                 const job = (result.jobs || []).find(j => j.id === jobId);
+                
                 if (!job) {
                     showNotification('Job not found', 'error');
                     return;
@@ -1715,7 +1709,7 @@ window.onload = function() {
                     });
                 }
             } catch (error) {
-                 document.getElementById('selectJob').innerHTML = '<option disabled>Could not load jobs</option>';
+                document.getElementById('selectJob').innerHTML = '<option disabled>Could not load jobs</option>';
             }
         }
 
@@ -1731,7 +1725,7 @@ window.onload = function() {
                 const jobsResult = await db.getAllJobs(currentSystem);
                 const job = (jobsResult.jobs || []).find(j => j.id === jobId);
                 if (!job) return;
-
+                
                 const invoiceNumResult = await db.getNextInvoiceNumber();
                 const invoiceNumber = 'INV-' + invoiceNumResult.nextNumber;
                 const currentDate = new Date().toLocaleDateString();
@@ -1806,14 +1800,14 @@ window.onload = function() {
                     </div>
                     
                     ${job.photos && job.photos.length > 0 ? `
-                    <div style="margin-top: 2rem; page-break-before: always;">
-                        <h3>Job Photos</h3>
-                        <div class="photo-grid">
-                            ${job.photos.map(photo => `
-                                <img src="${photo.data}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 5px;">
-                            `).join('')}
+                        <div style="margin-top: 2rem; page-break-before: always;">
+                            <h3>Job Photos</h3>
+                            <div class="photo-grid">
+                                ${job.photos.map(photo => `
+                                    <img src="${photo.data}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 5px;">
+                                `).join('')}
+                            </div>
                         </div>
-                    </div>
                     ` : ''}
                     
                     <div style="margin-top: 3rem; text-align: center; color: var(--text-muted);">
@@ -1825,7 +1819,7 @@ window.onload = function() {
                 document.getElementById('invoicePreview').innerHTML = invoiceHTML;
                 document.getElementById('invoicePreview').style.display = 'block';
                 document.getElementById('invoiceActions').style.display = 'flex';
-
+                
                 window.currentInvoiceData = { job, invoiceNumber, invoiceHTML };
             } catch (error) {
                 showNotification('Could not generate invoice preview.', 'error');
@@ -1834,6 +1828,7 @@ window.onload = function() {
 
         function sendInvoice(event) {
             const sendButton = event.currentTarget;
+            
             if (!window.currentInvoiceData) {
                 showNotification('Please select a job first', 'warning');
                 return;
@@ -1841,6 +1836,7 @@ window.onload = function() {
             
             showConfirmation('Are you sure you want to email this invoice?', async () => {
                 const { job, invoiceNumber } = window.currentInvoiceData;
+                
                 const invoiceData = {
                     invoiceNumber,
                     invoiceDate: new Date().toLocaleDateString(),
@@ -1852,9 +1848,10 @@ window.onload = function() {
                     amount: parseFloat(job.amountEPO).toFixed(2),
                     jobDescription: job.jobDescription
                 };
-
+                
                 try {
-                    const result = await db.sendInvoice(invoiceData, sendButton);
+                    const result = await db.sendInvoice(invoiceData, job.photos || [], sendButton);
+                    
                     if (result.success) {
                         // Create invoice record
                         const invoice = {
@@ -1888,7 +1885,7 @@ window.onload = function() {
                         loadJobsForInvoicing();
                         checkEmailQuota();
                     } else {
-                         showNotification(`Failed to send invoice: ${result.error}`, 'error');
+                        showNotification(`Failed to send invoice: ${result.error}`, 'error');
                     }
                 } catch(error) {
                     // Handled by _fetch
@@ -1962,55 +1959,55 @@ window.onload = function() {
         }
 
         function loadSettings() {
-    const savedSettings = localStorage.getItem('invoiceSystemSettings');
-    if (savedSettings) {
-        const settings = JSON.parse(savedSettings);
-        
-        // Update form fields
-        document.getElementById('scriptUrl').value = settings.scriptUrl || '';
-        document.getElementById('currentInvoiceNumber').value = settings.currentInvoiceNumber || '1000';
-        
-        // Update configuration
-        invoiceCounter = parseInt(settings.currentInvoiceNumber || '1000');
-        CONFIG.googleSheets.scriptUrl = settings.scriptUrl || '';
-        
-        // IMPORTANT: Update the database instance
-        if (settings.scriptUrl) {
-            db.scriptUrl = settings.scriptUrl;
-        }
-    }
-    
-    // Update next invoice preview
-    document.getElementById('nextInvoicePreview').textContent = invoiceCounter + 1;
-}
-        
-       async function testConnection() {
-    const syncStatus = document.querySelector('.sync-status');
-    syncStatus.textContent = '🔄 Connecting...';
-    
-    // Also check email quota when testing connection
-    let quotaCheckPromise = checkEmailQuota();
-    
-    try {
-        const result = await db._fetch('?action=test');
-        if (result.status && result.status.includes('connected')) {
-            syncStatus.textContent = '✅ Connected';
-            showNotification('Connected to Google Apps Script!', 'success');
+            const savedSettings = localStorage.getItem('invoiceSystemSettings');
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+                
+                // Update form fields
+                document.getElementById('scriptUrl').value = settings.scriptUrl || '';
+                document.getElementById('currentInvoiceNumber').value = settings.currentInvoiceNumber || '1000';
+                
+                // Update configuration
+                invoiceCounter = parseInt(settings.currentInvoiceNumber || '1000');
+                CONFIG.googleSheets.scriptUrl = settings.scriptUrl || '';
+                
+                // IMPORTANT: Update the database instance
+                if (settings.scriptUrl) {
+                    db.scriptUrl = settings.scriptUrl;
+                }
+            }
             
-            // Wait for quota check to complete
-            await quotaCheckPromise;
-        } else {
-            throw new Error('Invalid response from script');
+            // Update next invoice preview
+            document.getElementById('nextInvoicePreview').textContent = invoiceCounter + 1;
         }
-    } catch (error) {
-        syncStatus.textContent = '❌ Connection Failed';
-        console.error('Connection test failed:', error);
-        // Don't show notification on page load if it fails
-        if (document.readyState === 'complete') {
-            showNotification('Connection failed. Check Script URL and deployment.', 'error');
+
+        async function testConnection() {
+            const syncStatus = document.querySelector('.sync-status');
+            syncStatus.textContent = '🔄 Connecting...';
+            
+            // Also check email quota when testing connection
+            let quotaCheckPromise = checkEmailQuota();
+            
+            try {
+                const result = await db._fetch('?action=test');
+                if (result.status && result.status.includes('connected')) {
+                    syncStatus.textContent = '✅ Connected';
+                    showNotification('Connected to Google Apps Script!', 'success');
+                    
+                    // Wait for quota check to complete
+                    await quotaCheckPromise;
+                } else {
+                    throw new Error('Invalid response from script');
+                }
+            } catch (error) {
+                syncStatus.textContent = '❌ Connection Failed';
+                console.error('Connection test failed:', error);
+                // Don't show notification on page load if it fails
+                if (document.readyState === 'complete') {
+                    showNotification('Connection failed. Check Script URL and deployment.', 'error');
+                }
+            }
         }
-    }
-}
 
         async function checkEmailQuota() {
             try {
