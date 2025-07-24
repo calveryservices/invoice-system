@@ -1907,72 +1907,183 @@
             }
         }
 
-        function sendInvoice(event) {
-            const sendButton = event.currentTarget;
-            
-            if (!window.currentInvoiceData) {
-                showNotification('Please select a job first', 'warning');
-                return;
-            }
-            
-            showConfirmation('Are you sure you want to email this invoice?', async () => {
-                const { job, invoiceNumber } = window.currentInvoiceData;
-                
-                const invoiceData = {
-                    invoiceNumber,
-                    invoiceDate: new Date().toLocaleDateString(),
-                    cmName: job.cmName,
-                    cmEmail: job.cmEmail,
-                    jobType: systemConfigs[currentSystem].name,
-                    community: job.community,
-                    lotNumber: job.lotNumber,
-                    amount: parseFloat(job.amountEPO).toFixed(2),
-                    jobDescription: job.jobDescription
-                };
-                
-                try {
-                    const result = await db.sendInvoice(invoiceData, job.photos || [], sendButton);
-                    
-                    if (result.success) {
-                        // Create invoice record
-                        const invoice = {
-                            invoiceNumber: invoiceNumber,
-                            dateSent: new Date().toISOString(),
-                            jobId: job.id,
-                            community: job.community,
-                            lotNumber: job.lotNumber,
-                            cmName: job.cmName,
-                            cmEmail: job.cmEmail,
-                            amount: parseFloat(job.amountEPO),
-                            status: 'Sent',
-                            system: currentSystem
-                        };
-                        
-                        await db.addInvoice(currentSystem, invoice);
-                        await db.updateJob(currentSystem, job.id, { status: 'Invoiced' });
-                        
-                        showNotification(`Invoice ${invoiceNumber} sent successfully! Emails remaining today: ${result.remainingQuota}`, 'success');
-                        
-                        // Update invoice counter
-                        invoiceCounter = parseInt(invoiceNumber.split('-')[1]);
-                        localStorage.setItem('invoiceCounter', invoiceCounter.toString());
-                        
-                        // Reset form
-                        document.getElementById('selectJob').value = '';
-                        document.getElementById('invoicePreview').style.display = 'none';
-                        document.getElementById('invoiceActions').style.display = 'none';
-                        
-                        loadJobs();
-                        loadJobsForInvoicing();
-                        checkEmailQuota();
-                    } else {
-                        showNotification(`Failed to send invoice: ${result.error}`, 'error');
-                    }
-                } catch(error) {
-                    // Handled by _fetch
-                }
+        // In your HTML file, update the sendInvoice function to add debugging:
+
+function sendInvoice(event) {
+    const sendButton = event.currentTarget;
+    
+    if (!window.currentInvoiceData) {
+        showNotification('Please select a job first', 'warning');
+        return;
+    }
+    
+    showConfirmation('Are you sure you want to email this invoice?', async () => {
+        const { job, invoiceNumber } = window.currentInvoiceData;
+        
+        // DEBUG: Check if job has photos
+        console.log('=== FRONTEND DEBUG ===');
+        console.log('Job object:', job);
+        console.log('Job has photos?', job.photos ? 'Yes' : 'No');
+        console.log('Number of photos:', job.photos ? job.photos.length : 0);
+        
+        if (job.photos && job.photos.length > 0) {
+            console.log('First photo structure:', {
+                name: job.photos[0].name,
+                hasData: !!job.photos[0].data,
+                dataLength: job.photos[0].data ? job.photos[0].data.length : 0,
+                dataPreview: job.photos[0].data ? job.photos[0].data.substring(0, 100) : 'No data'
             });
         }
+        
+        const invoiceData = {
+            invoiceNumber,
+            invoiceDate: new Date().toLocaleDateString(),
+            cmName: job.cmName,
+            cmEmail: job.cmEmail,
+            jobType: systemConfigs[currentSystem].name,
+            community: job.community,
+            lotNumber: job.lotNumber,
+            amount: parseFloat(job.amountEPO).toFixed(2),
+            jobDescription: job.jobDescription,
+            poNumber: job.poNumber || ''  // Add PO number
+        };
+        
+        try {
+            // DEBUG: Log what we're sending
+            console.log('Sending invoice data:', invoiceData);
+            console.log('Sending photos:', job.photos || []);
+            console.log('Photos array is:', Array.isArray(job.photos) ? 'an array' : 'not an array');
+            
+            const result = await db.sendInvoice(invoiceData, job.photos || [], sendButton);
+            
+            if (result.success) {
+                // Create invoice record
+                const invoice = {
+                    invoiceNumber: invoiceNumber,
+                    dateSent: new Date().toISOString(),
+                    jobId: job.id,
+                    community: job.community,
+                    lotNumber: job.lotNumber,
+                    cmName: job.cmName,
+                    cmEmail: job.cmEmail,
+                    amount: parseFloat(job.amountEPO),
+                    status: 'Sent',
+                    system: currentSystem
+                };
+                
+                await db.addInvoice(currentSystem, invoice);
+                await db.updateJob(currentSystem, job.id, { status: 'Invoiced' });
+                
+                // Show detailed success message
+                let message = `Invoice ${invoiceNumber} sent successfully!`;
+                if (result.attachmentCount > 0) {
+                    message += ` (${result.attachmentCount} photos attached)`;
+                }
+                if (result.attachmentErrors && result.attachmentErrors.length > 0) {
+                    message += ` Warning: ${result.attachmentErrors.length} photos failed to attach`;
+                }
+                message += ` Emails remaining today: ${result.remainingQuota}`;
+                
+                showNotification(message, 'success');
+                
+                // Update invoice counter
+                invoiceCounter = parseInt(invoiceNumber.split('-')[1]);
+                localStorage.setItem('invoiceCounter', invoiceCounter.toString());
+                
+                // Reset form
+                document.getElementById('selectJob').value = '';
+                document.getElementById('invoicePreview').style.display = 'none';
+                document.getElementById('invoiceActions').style.display = 'none';
+                
+                loadJobs();
+                loadJobsForInvoicing();
+                checkEmailQuota();
+            } else {
+                showNotification(`Failed to send invoice: ${result.error}`, 'error');
+            }
+        } catch(error) {
+            console.error('Frontend error:', error);
+            showNotification(`Error: ${error.message}`, 'error');
+        }
+    });
+}
+
+// Also update the loadJobsForInvoicing function to ensure photos are parsed:
+
+async function loadJobsForInvoicing() {
+    try {
+        const result = await db.getAllJobs(currentSystem);
+        const jobs = result.jobs || [];
+        const select = document.getElementById('selectJob');
+        
+        select.innerHTML = '<option value="">Select a completed job...</option>';
+        
+        const completedJobs = jobs.filter(job => {
+            // Ensure photos is an array for filtering
+            if (job.photos && typeof job.photos === 'string') {
+                try {
+                    job.photos = JSON.parse(job.photos);
+                    console.log(`Parsed photos for job ${job.id}:`, job.photos.length, 'photos');
+                } catch (e) {
+                    console.error(`Failed to parse photos for job ${job.id}:`, e);
+                    job.photos = [];
+                }
+            }
+            return job.status === 'Completed';
+        });
+        
+        if (completedJobs.length === 0) {
+            select.innerHTML += '<option disabled>No completed jobs found</option>';
+        } else {
+            completedJobs.forEach(job => {
+                const option = document.createElement('option');
+                option.value = job.id;
+                const photoCount = job.photos && job.photos.length > 0 ? ` (${job.photos.length} photos)` : '';
+                option.textContent = `${job.community} - Lot ${job.lotNumber} - $${parseFloat(job.amountEPO).toFixed(2)}${photoCount}`;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        document.getElementById('selectJob').innerHTML = '<option disabled>Could not load jobs</option>';
+    }
+}
+
+// Add this debug function to test photo data
+function debugCheckPhotos() {
+    // Run this in the browser console to check if jobs have photos
+    db.getAllJobs(currentSystem).then(result => {
+        const jobs = result.jobs || [];
+        console.log('=== PHOTO DEBUG REPORT ===');
+        console.log(`Total jobs: ${jobs.length}`);
+        
+        jobs.forEach(job => {
+            if (job.photos && typeof job.photos === 'string') {
+                try {
+                    job.photos = JSON.parse(job.photos);
+                } catch (e) {
+                    job.photos = [];
+                }
+            }
+            
+            const photoCount = job.photos ? job.photos.length : 0;
+            console.log(`Job ${job.id}: ${photoCount} photos`, {
+                community: job.community,
+                lot: job.lotNumber,
+                status: job.status,
+                hasPhotos: photoCount > 0
+            });
+            
+            if (photoCount > 0 && job.photos[0]) {
+                console.log(`  First photo:`, {
+                    name: job.photos[0].name,
+                    hasData: !!job.photos[0].data,
+                    dataLength: job.photos[0].data ? job.photos[0].data.length : 0
+                });
+            }
+        });
+        console.log('=== END REPORT ===');
+    });
+}
 
         function printInvoice() {
             window.print();
