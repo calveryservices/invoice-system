@@ -1812,7 +1812,7 @@
                 
                 const invoiceNumResult = await db.getNextInvoiceNumber();
                 const invoiceNumber = 'INV-' + invoiceNumResult.nextNumber;
-                const currentDate = new Date().toLocaleDateString();
+                const jobCompletionDate = new Date(job.dateJobDone).toLocaleDateString();
                 
                 const invoiceHTML = `
                     <div class="invoice-header">
@@ -1825,7 +1825,7 @@
                         </div>
                         <div class="invoice-details">
                             <div class="invoice-number">${invoiceNumber}</div>
-                            <p><strong>Date:</strong> ${currentDate}</p>
+                            <p><strong>Date:</strong> ${jobCompletionDate}</p>
                             <p><strong>PO Number:</strong> ${job.poNumber || 'N/A'}</p>
                         </div>
                     </div>
@@ -1940,7 +1940,7 @@ function sendInvoice(event) {
         
         const invoiceData = {
             invoiceNumber,
-            invoiceDate: new Date().toLocaleDateString(),
+            invoiceDate: new Date(job.dateJobDone).toLocaleDateString(),
             cmName: job.cmName,
             cmEmail: job.cmEmail,
             jobType: systemConfigs[currentSystem].name,
